@@ -379,10 +379,10 @@ class Human36mCamera(MocapDataset):
             self.camera_set[subject]['K'] = K
             self.camera_set[subject]['intrin'] = temp_cam.squeeze(0).squeeze(1)
             ######world->image
-            prj_mat = torch.einsum('nkj,njc->nkc', K, exi_mat)#(N_view, 3, 4)
+            prj_mat = torch.einsum('nkj,njc->nkc',K, exi_mat)#(N_view, 3, 4)
             self.camera_set[subject]['prj_mat'] = prj_mat
 
-    def p2d_cam3d(self, p2d, subject, view_list, debug=False):
+    def p2d_cam3d(self, p2d, subject, view_list):
         '''
         p2d: (B, T,J, C, N) 
         '''
@@ -396,26 +396,11 @@ class Human36mCamera(MocapDataset):
 
         trj_w3d_homo = torch.cat((trj_w3d, torch.ones(trj_w3d.shape[0], 17, 1)), dim = -1)
         trj_c3d = torch.einsum('nkc,mjc->mnjk', exi_mat[view_list, ...], trj_w3d_homo) #(B*T, N, J, 3)
-        if debug==True:
-            exi_mat_inv = self.camera_set[subject]['exi_mat_inv'][view_list, ...] #(N, 3, 4)
-            #trj_c2w_3d = torch.einsum('nkc, vjc->mn')
         trj_c3d = trj_c3d.view(B, T, N, J, 3).permute(0, 1, 3, 4, 2).contiguous() ##B, T, J, 3, N)
-        
+
         trj_c3d = trj_c3d - trj_c3d[:,:,:1]
 
         return trj_c3d
-
-    def p2d_cam3d_batch(self, p2d, subject_list, view_list, debug=False):
-        '''
-        p2d: (B, T,J, C, N)
-        '''
-        B, T, J, C, N = p2d.shape
-        trj_c3d = torch.zeros((B, T, J, 3, N))
-        for inx, sub in enumerate(subject_list):
-            trj_c3d[inx] = self.p2d_cam3d(p2d[inx].unsqueeze(0), sub[0], view_list, debug=debug).unsqueeze(0)
-        return trj_c3d
-
-
     def p3d_im2d(self, p3d, subject, view_list):
         '''
         :param p3d:
@@ -438,7 +423,7 @@ class Human36mCamera(MocapDataset):
             p_2d[inx,:,:,:,:] = project_to_2d(p3d_, intri_mat)
         return p_2d.permute(0,2,3,4,1), p_2d
     
-    def p3d_im2d_batch(self, p3d, subject, view_list, with_distor=False):
+    def p3d_im2d_batch(self, p3d, subject, view_list):
         '''
         :param p3d:
         :param subject:
@@ -446,39 +431,14 @@ class Human36mCamera(MocapDataset):
         :return: im2d
         '''
         p3d = p3d[..., self.cfg.H36M_DATA.TRAIN_CAMERAS]
-        if not with_distor:
-            B, T, J, C, N = p3d.shape
-            K = self.camera_set[subject[0][0]]['K']
-            p3d = p3d.squeeze(1).view((-1, C, N)).permute(0, 2, 1).unsqueeze(3).contiguous()
-            K = K.unsqueeze(0).repeat(B*J, 1, 1, 1).to(p3d.device)
-            p_2d = torch.einsum('bvik,bvkj->bvij', K, p3d).view(B, J, N, 3, 1).squeeze().contiguous()
-            p_2d = (p_2d/p_2d[:,:,:,-1].unsqueeze(3))[:,:,:,:2]
-        else:
-            p3d = p3d.permute(0, 4, 1, 2, 3)
-            B, N, T, J, C = p3d.shape
-            p3d = p3d.contiguous().view((-1, T, J, C)).contiguous()
-            intri_mat = self.camera_set[subject[0][0]]['intrin']  # [4, 9]
-            # intri_mat = intri_mat.unsqueeze(0).repeat([B, 1, 1]).view((-1, 9)).contiguous().to(p3d.device)  # [B*4, 9]
-            intri_mat = intri_mat.repeat([B, 1, 1]).view((-1, 9)).contiguous().to(p3d.device)  # [B*4, 9]
-            p_2d = project_to_2d(p3d, intri_mat)
-            p_2d = p_2d.unsqueeze(0).view((B, N, T, J, 2)).contiguous()
-        return p_2d
-    
-    def p3dcam_3dwd_batch(self, p3d, subject, view_list):
-        '''
-        p3d: 3d poses in camera space
-        p_3dwd: returned 3d poses in world space
-        '''
-        p3d = p3d[..., self.cfg.H36M_DATA.TRAIN_CAMERAS]
         p3d = p3d.permute(0, 4, 1, 2, 3)
         B, N, T, J, C = p3d.shape
-        extri_mat = torch.zeros(B, 4, 3) 
-        for inx, sub in enumerate(subject):
-            extri_mat[inx] = self.camera_set[sub]['exi_mat_inv']
-        p_3dwd_homo = torch.enisum('bhc,bntjc->bntjh', extri_mat, p3d)
-        p_3dwd = p_3dwd_homo/pp_3dwd_homo[:,:,:,-1].unsqueeze(3))[:,:,:,:2]
-        return p_3dwd
-        
+        intri_mat = self.camera_set[subject[0][0]]['intrin']   # [4, 9]
+        intri_mat = intri_mat.repeat([B,1,1]).view((-1, 9)).contiguous().to(p3d.device)  #[B*4, 9]
+        p3d = p3d.contiguous().view((-1, T, J, C)).contiguous()
+        p_2d = project_to_2d(p3d, intri_mat)
+        p_2d = p_2d.unsqueeze(0).view((B, N, T, J, 2)).contiguous()
+        return p_2d 
 
 class Human36mDataset(MocapDataset):
     def __init__(self, cfg, keypoints): 

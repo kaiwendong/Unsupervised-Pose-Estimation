@@ -331,7 +331,6 @@ if True:
                 pos_gt = inputs_3d_gt[..., view_list]
             #if cfg.H36M_DATA.PROJ_Frm_3DCAM == True:
             #    prj_3dgt_to_2d= HumanCam.p3d_im2d(pos_gt, sub_action, view_list)
-            p3d_gt_ori = copy.deepcopy(pos_gt)
             p3d_root = copy.deepcopy(pos_gt[:,:,:1]) #(B,T, 1, 3, N)
             pos_gt[:,:,:1] = 0
             
@@ -353,25 +352,21 @@ if True:
  
             if cfg.TRAIN.USE_INTER_LOSS:
                 print('Input shape is {}'.format(inp.shape))
-                if cfg.TRAIN.TEMPORAL_SMOOTH_LOSS_WEIGHT is not None:
-                    out, out_full, other_out, tran, pred_rot = model(inp, rotation)
-                else:
-                    out, other_out, tran, pred_rot = model(inp, rotation) #mask:(B, 1, 1, 1, N, N)
+                out, other_out, tran, pred_rot = model(inp, rotation) #mask:(B, 1, 1, 1, N, N)
+                #plt.ion()
+                #vis_tool = Vis(cfg, 2)
+                #out = out.detach().cpu()
+                #inputs_2d_pre = inputs_2d_pre.detach().cpu()
+                #inputs_3d_gt = inputs_3d_gt.detach().cpu()
+                #vis_tool.show(inputs_2d_pre[:,pad], out[:,0], inputs_3d_gt[:,0])
             else:
                 out = model(inp, rotation)
             
             if cfg.H36M_DATA.PROJ_Frm_3DCAM == True:
-                p3d_gt_abs = pos_gt+p3d_root
-                prj_3dpre_to_2d = HumanCam.p3d_im2d_batch(out+p3d_root[:, pad:pad+1], sub_action, view_list, with_distor=True)
-                #prj_3dgt_rela_to_2d = HumanCam.p3d_im2d_batch(p3d_gt_ori[:, pad:pad+1], sub_action, view_list, with_distor=True)
-                #prj_3dgt_abs_to_2d = HumanCam.p3d_im2d_batch(p3d_gt_abs[:, pad:pad+1], sub_action, view_list, with_distor=False)
-                #prj_2dgt_to_3d = HumanCam.p2d_cam3d_batch(inputs_2d_gt[:, pad:pad+1, :, :], sub_action, view_list[:4], debug=True)
-                pri_3dcam_pre_to_3dwd = HumanCam.p3dcam_3dwd_batch(out+p3d_root[:, pad:pad+1], sub_action, view_list)
-                pri_3dcam_gt_to_3dwd = HumanCam.p3dcam_3dwd_batch(p3d_gt_abs[:, pad:pad+1], sub_action, view_list)
-                #for vw in range(4):
-                #    print("------------- View {} ----------------\n".format(str(vw)))
-                #    print('Network Output is {}; \n Projection Output is {}'.format(out[0,0,:,:,vw], prj_3dpre_to_2d[0,vw,0]))
-                #    print("GT 2D : "+str(inp[0,3:4,:,:,vw]))
+                prj_3dpre_to_2d = HumanCam.p3d_im2d_batch(out, sub_action, view_list)
+                #prj_3dpre_to_2d_test1, prj_3dpre_to_2d_test2 = HumanCam.p3d_im2d(out, sub_action, view_list)
+                #print('Debuging!!!')
+            #    prj_3dgt_to_2d = prj_3dgt_to_2d.permute(0, 1, 4, 2, 3).contiguous()
 
             out = out.permute(0, 1, 4, 2,3).contiguous() #(B, T, N, J. C)
             pos_gt = pos_gt.permute(0, 1, 4,2, 3).contiguous()
@@ -393,18 +388,11 @@ if True:
             loss_consis = 0
             if cfg.H36M_DATA.PROJ_Frm_3DCAM == True:
                 prj_3dpre_to_2d = prj_3dpre_to_2d.permute(0,2,3,4,1).contiguous()
-                loss_consis = msefun(prj_3dpre_to_2d, pos_gt_2d[:, pad:pad+1, :, :, [0,1,2,3]].to(prj_3dpre_to_2d.device))
-                print('Consistancy Loss is {}'.format(loss_consis))
-                print('Supervised Loss is {}'.format(loss))
-                loss = loss  + loss_consis_weight * loss_consis if cfg.TRAIN.CONSIS_LOSS_ADD==True else loss
-                print('Summed Loss is {}'.format(loss))
+                #loss_consis = msefun(prj_3dpre_to_2d, prj_3dgt_to_2d[:,pad:pad+1])
+                loss_consis = msefun(prj_3dpre_to_2d, pos_pre_2d[..., [0,1,2,3]][:,pad:pad+1].to(prj_3dpre_to_2d.device))
+                loss = loss + loss_consis_weight * loss_consis
                 summary_writer.add_scalar("loss_consis/iter", loss_consis, iters)
             
-            if cfg.TRAIN.TEMPORAL_SMOOTH_LOSS_WEIGHT is not None:
-                weight_smooth = cfg.TRAIN.TEMPORAL_SMOOTH_LOSS_WEIGHT * 1/len(cfg.H36M_DATA.TRAIN_CAMERAS)
-                print('Here is temporal smoothness loss!')
-                smooth_err = weight_smooth * msefun(out_full[:,1:], out_full[:,:-1])
-
             inter_loss_weight = cfg.TRAIN.INTER_LOSS_WEIGHT
             inter_loss_all = 0
             if cfg.TRAIN.USE_INTER_LOSS:
@@ -529,7 +517,7 @@ if True:
                                     out[:,:,0] = 0
                                     
                                     out = out.detach().cpu()
-                                    if EVAL and args.vis_3d:
+                                    if EVAL and cfg.VIS.VIS_3D:
                                         vis_tool.show(inputs_2d_pre[:,pad_t], out[:,0], inputs_3d_gt[:,0])
 
                                     if cfg.TEST.TEST_ROTATION:

@@ -37,6 +37,7 @@ config.TRAIN.RESUME = False
 config.TRAIN.RESUME_CHECKPOINT = "./checkpoint/"
 config.TRAIN.CONSIS_LOSS_WEIGHT = 0.5
 config.TRAIN.TEMPORAL_SMOOTH_LOSS_WEIGHT = None
+config.TRAIN.CONSIS_LOSS_ADD = False
 
 
 #Network
