@@ -463,22 +463,18 @@ class Human36mCamera(MocapDataset):
             p_2d = project_to_2d(p3d, intri_mat)
             p_2d = p_2d.unsqueeze(0).view((B, N, T, J, 2)).contiguous()
         return p_2d
-    
     def p3dcam_3dwd_batch(self, p3d, subject, view_list):
-        '''
-        p3d: 3d poses in camera space
-        p_3dwd: returned 3d poses in world space
-        '''
+        #p3d: 3d poses in camera space
+        #p_3dwd: returned 3d poses in world space
         p3d = p3d[..., self.cfg.H36M_DATA.TRAIN_CAMERAS]
         p3d = p3d.permute(0, 4, 1, 2, 3)
         B, N, T, J, C = p3d.shape
-        extri_mat = torch.zeros(B, 4, 3) 
+        extri_mat = torch.zeros(B, 4, 3, 4).unsqueeze(2).unsqueeze(3).permute(0,1,2,3,5,4)
         for inx, sub in enumerate(subject):
-            extri_mat[inx] = self.camera_set[sub]['exi_mat_inv']
-        p_3dwd_homo = torch.enisum('bhc,bntjc->bntjh', extri_mat, p3d)
-        p_3dwd = p_3dwd_homo/pp_3dwd_homo[:,:,:,-1].unsqueeze(3))[:,:,:,:2]
-        return p_3dwd
-        
+            extri_mat[inx] = self.camera_set[sub[0]]['exi_mat_inv'].unsqueeze(1).unsqueeze(2).permute(0,1,2,4,3)
+        p_3dwd_homo = torch.einsum('bntjhc,bntjc->bntjh', extri_mat.repeat(1,1,1,17,1,1).to(p3d.device), p3d)
+        p_3dwd = (p_3dwd_homo/p_3dwd_homo[...,-1].unsqueeze(-1))[...,:3]
+        return p_3dwd.contiguous()
 
 class Human36mDataset(MocapDataset):
     def __init__(self, cfg, keypoints): 

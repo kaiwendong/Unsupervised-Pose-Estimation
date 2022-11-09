@@ -366,12 +366,9 @@ if True:
                 #prj_3dgt_rela_to_2d = HumanCam.p3d_im2d_batch(p3d_gt_ori[:, pad:pad+1], sub_action, view_list, with_distor=True)
                 #prj_3dgt_abs_to_2d = HumanCam.p3d_im2d_batch(p3d_gt_abs[:, pad:pad+1], sub_action, view_list, with_distor=False)
                 #prj_2dgt_to_3d = HumanCam.p2d_cam3d_batch(inputs_2d_gt[:, pad:pad+1, :, :], sub_action, view_list[:4], debug=True)
+            if cfg.TRAIN.PROJ_3DCAM_TO_3DWD:
                 pri_3dcam_pre_to_3dwd = HumanCam.p3dcam_3dwd_batch(out+p3d_root[:, pad:pad+1], sub_action, view_list)
                 pri_3dcam_gt_to_3dwd = HumanCam.p3dcam_3dwd_batch(p3d_gt_abs[:, pad:pad+1], sub_action, view_list)
-                #for vw in range(4):
-                #    print("------------- View {} ----------------\n".format(str(vw)))
-                #    print('Network Output is {}; \n Projection Output is {}'.format(out[0,0,:,:,vw], prj_3dpre_to_2d[0,vw,0]))
-                #    print("GT 2D : "+str(inp[0,3:4,:,:,vw]))
 
             out = out.permute(0, 1, 4, 2,3).contiguous() #(B, T, N, J. C)
             pos_gt = pos_gt.permute(0, 1, 4,2, 3).contiguous()
@@ -379,7 +376,7 @@ if True:
                 for i in range(len(other_out)): 
                     other_out[i] = other_out[i].permute(0, 1, 4, 2,3).contiguous() #(B, T, N, J. C)
                 
-            loss = mpjpe(out , pos_gt[:,pad:pad+1])
+            loss = mpjpe(out , pos_gt[:,pad:pad+1]) if cfg.TRAIN.UNSUPERVISE==False else 0
             if summary_writer is not None:
                 summary_writer.add_scalar("loss_final/iter", loss, iters)
             if pred_rot is not None and cfg.TRAIN.USE_ROT_LOSS:
@@ -410,9 +407,9 @@ if True:
             if cfg.TRAIN.USE_INTER_LOSS:
                 for i in range(len(other_out)):
                     if other_out[i].shape[1] == 1:
-                        inter_loss = mpjpe(other_out[i] , pos_gt[:,pad:pad+1])
+                        inter_loss = mpjpe(other_out[i] , pos_gt[:,pad:pad+1]) if cfg.TRAIN.UNSUPERVISE==False else 0
                     else:
-                        inter_loss = mpjpe(other_out[i] , pos_gt)
+                        inter_loss = mpjpe(other_out[i] , pos_gt)if cfg.TRAIN.UNSUPERVISE==False else 0
                     inter_loss_all = inter_loss_all + inter_loss_weight[i] * inter_loss 
                     if summary_writer is not None:
                         summary_writer.add_scalar("loss_inter_{}/iter".format(cfg.TRAIN.INTER_LOSS_NAME[i]), inter_loss, iters)

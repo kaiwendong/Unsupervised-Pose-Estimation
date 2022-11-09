@@ -35,9 +35,11 @@ config.TRAIN.ROT_LOSS_WEIGHT = 0.5
 
 config.TRAIN.RESUME = False
 config.TRAIN.RESUME_CHECKPOINT = "./checkpoint/"
-config.TRAIN.CONSIS_LOSS_WEIGHT = 0.5
+config.TRAIN.PROJ_3DCAM_TO_3DWD = False
+config.TRAIN.CONSIS_LOSS_WEIGHT = 0.1
 config.TRAIN.TEMPORAL_SMOOTH_LOSS_WEIGHT = None
-config.TRAIN.CONSIS_LOSS_ADD = False
+config.TRAIN.CONSIS_LOSS_ADD = False # if true then 
+config.TRAIN.UNSUPERVISE = False    #if true then abandent the loss from ground truth target.
 
 
 #Network
