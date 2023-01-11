@@ -9,6 +9,7 @@ import numpy as np
 import copy
 import torch
 import itertools
+import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation as R
 
 from common.mocap_dataset import MocapDataset
@@ -17,7 +18,13 @@ from common.utils import wrap
 from common.quaternion import qrot, qinverse
 from common.loss import *
 from common.multiview import Camera, project_3d_points_to_image_plane_without_distortion
-       
+from common.skeleton import Skeleton
+
+h36m_skeleton = Skeleton(parents=[-1, 0, 1, 2, 3, 4, 0, 6, 7, 8, 9, 0, 11, 12, 13, 14, 12,
+                                  16, 17, 18, 19, 20, 19, 22, 12, 24, 25, 26, 27, 28, 27, 30],
+                         joints_left=[6, 7, 8, 9, 10, 16, 17, 18, 19, 20, 21, 22, 23],
+                         joints_right=[1, 2, 3, 4, 5, 24, 25, 26, 27, 28, 29, 30, 31])
+
 h36m_cameras_intrinsic_params = [
     {
         'id': '54138969',
@@ -313,6 +320,7 @@ class Human36mCamera(MocapDataset):
         super().__init__()
         self.cfg = cfg
         self._cameras = copy.deepcopy(h36m_cameras_extrinsic_params)
+        self._skeleton = h36m_skeleton
         for subject, cameras in self._cameras.items():
             for i, cam in enumerate(cameras):
                 cam.update(h36m_cameras_intrinsic_params[i])
@@ -334,7 +342,18 @@ class Human36mCamera(MocapDataset):
                                                    cam['center'],
                                                    cam['radial_distortion'],
                                                    cam['tangential_distortion'])))
-                
+        wd3d_path = '/opt/data/jupyterlab/kaiwen/repo/pose3d/MHFormer/dataset/data_3d_h36m.npz'
+        data_mhf = np.load(wd3d_path, allow_pickle=True)['positions_3d'].item()
+        self._data = {}
+        for subject, actions in data_mhf.items():
+            self._data[subject] = {}
+            for action_name, positions in actions.items():
+                self._data[subject][action_name] = {
+                    'positions': positions,
+                    'cameras': self._cameras[subject],
+                }
+        self.remove_joints([4, 5, 9, 10, 11, 16, 20, 21, 22, 23, 24, 28, 29, 30, 31])
+
         self.camera_set = {}
         for subject in self._cameras.keys():
             print('***', subject)
@@ -382,6 +401,13 @@ class Human36mCamera(MocapDataset):
             prj_mat = torch.einsum('nkj,njc->nkc', K, exi_mat)#(N_view, 3, 4)
             self.camera_set[subject]['prj_mat'] = prj_mat
 
+    def remove_joints(self, joints_to_remove):
+        kept_joints = self._skeleton.remove_joints(joints_to_remove)
+        for subject in self._data.keys():
+            for action in self._data[subject].keys():
+                s = self._data[subject][action]
+                s['positions'] = s['positions'][:, kept_joints]
+
     def p2d_cam3d(self, p2d, subject, view_list, debug=False):
         '''
         p2d: (B, T,J, C, N) 
@@ -398,22 +424,45 @@ class Human36mCamera(MocapDataset):
         trj_c3d = torch.einsum('nkc,mjc->mnjk', exi_mat[view_list, ...], trj_w3d_homo) #(B*T, N, J, 3)
         if debug==True:
             exi_mat_inv = self.camera_set[subject]['exi_mat_inv'][view_list, ...] #(N, 3, 4)
-            #trj_c2w_3d = torch.einsum('nkc, vjc->mn')
         trj_c3d = trj_c3d.view(B, T, N, J, 3).permute(0, 1, 3, 4, 2).contiguous() ##B, T, J, 3, N)
         
         trj_c3d = trj_c3d - trj_c3d[:,:,:1]
-
-        return trj_c3d
+        if debug==False:
+            return trj_c3d
+        else:
+            return trj_c3d, trj_w3d
 
     def p2d_cam3d_batch(self, p2d, subject_list, view_list, debug=False):
         '''
         p2d: (B, T,J, C, N)
         '''
         B, T, J, C, N = p2d.shape
-        trj_c3d = torch.zeros((B, T, J, 3, N))
+        #trj_c3d = torch.zeros((B, T, J, 3, N))
+        prj_mat = torch.zeros(B, 4, 3, 4)
+        exi_mat = torch.zeros(B, 4, 3, 4)
         for inx, sub in enumerate(subject_list):
-            trj_c3d[inx] = self.p2d_cam3d(p2d[inx].unsqueeze(0), sub[0], view_list, debug=debug).unsqueeze(0)
+            prj_mat[inx] = self.camera_set[sub[0]]['prj_mat']
+            exi_mat[inx] = self.camera_set[sub[0]]['exi_mat']
+        trj_w3d = triangulation(p2d.view(-1, J, C, N).permute(0, 1, 3, 2).contiguous(), prj_mat[:, view_list,...]) #(B*T, J, 3)
+        trj_w3d_homo = torch.cat((trj_w3d, torch.ones(trj_w3d.shape[0], 17, 1)), dim = -1)
+        trj_c3d = torch.einsum('mnkc,mjc->mnjk', exi_mat[:,view_list, ...], trj_w3d_homo) #(B*T, N, J, 3)
+        trj_c3d = trj_c3d.view(B, T, N, J, 3).permute(0, 1, 3, 4, 2).contiguous() ##B, T, J, 3, N)
+        trj_c3d = trj_c3d - trj_c3d[:,:,:1]
         return trj_c3d
+    def p2d_world3d_batch(self, p2d, subject_list, view_list):
+        '''
+        p2d: (B, T, J, C, N)
+        '''
+        B, T, J, C, N = p2d.shape
+        p2d=p2d[...,:4].permute(0, 1, 2, 4, 3).view(B*T, J, -1, C).contiguous() #(B, T, J, N, C)
+        prj_mat = torch.zeros(B, 4, 3, 4)
+        for inx, sub in enumerate(subject_list):
+            prj_mat[inx] = self.camera_set[sub[0]]['prj_mat']
+        prj_mat=prj_mat.repeat(T, 1, 1, 1)
+        trj_w3d = triangulation(p2d, prj_mat) #(B*T, J, 3)
+        trj_w3d = trj_w3d.view(B, T, J, 3).contiguous()
+
+        return trj_w3d
 
 
     def p3d_im2d(self, p3d, subject, view_list):
@@ -428,12 +477,7 @@ class Human36mCamera(MocapDataset):
         B, N, T, J, C = p3d.shape
         p_2d = torch.zeros((B, N, T, J, 2))
         for inx, sub, p3d_ in zip(range(B), subject, p3d):
-            #prj_mat = self.camera_set[sub[0]]['prj_mat']
             intri_mat = self.camera_set[sub[0]]['intrin']
-            #K = self.camera_set[sub[0]]['K']
-            #exi_mat = self.camera_set[sub[0]]['exi_mat']
-            #R = exi_mat[:,:,:3]
-            #T = exi_mat[:,:,:-1]
             intri_mat = intri_mat.to(p3d_.device)
             p_2d[inx,:,:,:,:] = project_to_2d(p3d_, intri_mat)
         return p_2d.permute(0,2,3,4,1), p_2d
@@ -445,9 +489,11 @@ class Human36mCamera(MocapDataset):
         :param view_list:
         :return: im2d
         '''
+        while len(p3d.shape)!=5:
+            p3d=p3d.unsqueeze(1)
         p3d = p3d[..., self.cfg.H36M_DATA.TRAIN_CAMERAS]
+        B, T, J, C, N = p3d.shape
         if not with_distor:
-            B, T, J, C, N = p3d.shape
             K = self.camera_set[subject[0][0]]['K']
             p3d = p3d.squeeze(1).view((-1, C, N)).permute(0, 2, 1).unsqueeze(3).contiguous()
             K = K.unsqueeze(0).repeat(B*J, 1, 1, 1).to(p3d.device)
@@ -455,10 +501,9 @@ class Human36mCamera(MocapDataset):
             p_2d = (p_2d/p_2d[:,:,:,-1].unsqueeze(3))[:,:,:,:2]
         else:
             p3d = p3d.permute(0, 4, 1, 2, 3)
-            B, N, T, J, C = p3d.shape
             p3d = p3d.contiguous().view((-1, T, J, C)).contiguous()
             intri_mat = self.camera_set[subject[0][0]]['intrin']  # [4, 9]
-            # intri_mat = intri_mat.unsqueeze(0).repeat([B, 1, 1]).view((-1, 9)).contiguous().to(p3d.device)  # [B*4, 9]
+            #print('Calling the {} intri_mat of subject {}, {}'.format(inx, sub[0], sub[1]))
             intri_mat = intri_mat.repeat([B, 1, 1]).view((-1, 9)).contiguous().to(p3d.device)  # [B*4, 9]
             p_2d = project_to_2d(p3d, intri_mat)
             p_2d = p_2d.unsqueeze(0).view((B, N, T, J, 2)).contiguous()
@@ -469,12 +514,58 @@ class Human36mCamera(MocapDataset):
         p3d = p3d[..., self.cfg.H36M_DATA.TRAIN_CAMERAS]
         p3d = p3d.permute(0, 4, 1, 2, 3)
         B, N, T, J, C = p3d.shape
-        extri_mat = torch.zeros(B, 4, 3, 4).unsqueeze(2).unsqueeze(3).permute(0,1,2,3,5,4)
+        #extri_mat = torch.zeros(B, 4, 3, 4).unsqueeze(2).unsqueeze(3).permute(0,1,2,3,5,4)
+        exi_mat_inv = torch.zeros(B, 4, 3, 4)
         for inx, sub in enumerate(subject):
-            extri_mat[inx] = self.camera_set[sub[0]]['exi_mat_inv'].unsqueeze(1).unsqueeze(2).permute(0,1,2,4,3)
-        p_3dwd_homo = torch.einsum('bntjhc,bntjc->bntjh', extri_mat.repeat(1,1,1,17,1,1).to(p3d.device), p3d)
-        p_3dwd = (p_3dwd_homo/p_3dwd_homo[...,-1].unsqueeze(-1))[...,:3]
-        return p_3dwd.contiguous()
+            #print('Calling the {} exi_mat_inv of subject {}, {}'.format(inx, sub[0], sub[1]))
+            #self.camera_set[sub[0]]['exi_mat_inv'].shape: torch.Size([4, 3, 4])
+            exi_mat_inv[inx] = self.camera_set[sub[0]]['exi_mat_inv']
+        #len(extri_mat)=2; extri_mat[0].shape: torch.Size([4, 1, 1, 4, 3])
+        #p3d.shape: torch.Size([2, 4, 1, 17, 3])
+        p_3dwd_homo = torch.cat((p3d.squeeze(), torch.ones(p3d.shape[0], N, J, 1).to(p3d.device)), dim = -1)
+        p_3dwd = torch.einsum('tnqc,tnjc->tnjq', exi_mat_inv.to(p3d.device), p_3dwd_homo)
+
+        #p_3dwd_homo.shape: torch.Size([2, 4, 1, 17, 4])
+        #p_3dwd.shape: torch.Size([2, 4, 1, 17, 3])
+        #np.save('p_3dwd.npy', p_3dwd.to('cpu').detach().numpy())
+        #fig = plt.figure()
+        #ax = fig.add_subplot(projection='3d')
+        #xs = p_3dwd[0,0,0,:,0].to('cpu').detach().numpy()
+        #ys = p_3dwd[0,0,0,:,1].to('cpu').detach().numpy()
+        #zs = p_3dwd[0,0,0,:,2].to('cpu').detach().numpy()
+        #ax.scatter(xs, ys, zs, marker='o')
+        #ax.set_xlabel('X Label')
+        #ax.set_ylabel('Y Label')
+        #ax.set_zlabel('Z Label')
+        #plt.savefig('pos_3d.png')
+        #plt.show()
+        return p_3dwd
+    def p3dwd_p2dim_batch(self, p3d, subject, view_list):
+        #projrct 3d camera coordination to 2d image coordination, without optical distortion
+        B, J, C = p3d.shape
+        prj_mat = torch.zeros(B, 4, 3, 4)
+        for inx, sub in enumerate(subject):
+            prj_mat[inx] = self.camera_set[sub[0]]['prj_mat']
+        p_3d_homo = torch.cat((p3d, torch.ones(p3d.shape[0], 17, 1).to(p3d.device)), dim = -1)
+        p_2dim_homo = torch.einsum('tnqc,tjc->tnjq',prj_mat.to(p3d.device), p_3d_homo)
+        p_2dim = p_2dim_homo[...,:2] / p_2dim_homo[...,-1:]
+        p_2dim = p_2dim[...,:2]
+        return p_2dim
+    def p3dwd_p3dcam_batch(self, p3d, subject, view_list):
+        B, J, C = p3d.shape
+        exi_mat = torch.zeros(B, 4, 3, 4)
+        K = torch.zeros(B, 4, 3, 3)
+        for inx, sub in enumerate(subject):
+            exi_mat[inx] = self.camera_set[sub[0]]['exi_mat']
+            K[inx] = self.camera_set[sub[0]]['K']
+        p_3d_homo = torch.cat((p3d, torch.ones(p3d.shape[0], 17, 1).to(p3d.device)), dim = -1)
+        p_3d_homo = torch.as_tensor(p_3d_homo, dtype=torch.float32)
+        p_3d_cam  = torch.einsum('mnkc,mjc->mnjk', exi_mat.to(p3d.device), p_3d_homo) #(T, N, J, 3)
+        #if cam2im:
+        #    p_2d = torch.einsum('mnjc,mnkc->mnjk', p_3d_cam, K.to(p3d.device))
+        #    p_2d[:,:,:,:2] /= p_2d[:,:,:,-1:]
+        #    p_2d = p_2d[...,:2]
+        return p_3d_cam 
 
 class Human36mDataset(MocapDataset):
     def __init__(self, cfg, keypoints): 
@@ -729,11 +820,17 @@ class Human36mCamDataset(MocapDataset):
                 norm_3d_gt = p3d / p3d[:,:,:,-1:]
                 
                 cam_norm_3d_trj_homo = torch.cat((cam_norm_3d_trj, torch.ones(cam_norm_3d_trj.shape[0], N_cam, 17, 1)), dim = -1)
+                #torch.ones(cam_norm_3d_trj.shape[0], N_cam, 17, 1).shape: torch.Size([2478, 4, 17, 1])
+                #cam_norm_3d_trj.shape: torch.Size([2478, 4, 17, 3])
                 p3d_homo = torch.cat((p3d, torch.ones(p3d.shape[0], N_cam, 17, 1)), dim = -1)
+                #p3d.shape: torch.Size([2478, 4, 17, 3])
+                #p3d_homo.shape: torch.Size([2478, 4, 17, 4])
 
                 world_norm_3d_trj = torch.einsum('nqc,tnjc->tnjq', exi_mat_inv, cam_norm_3d_trj_homo)
+                #exi_mat_inv.shape: torch.Size([4, 3, 4])
+                #cam_norm_3d_trj_homo.shape: torch.Size([2478, 4, 17, 4])
                 world_3d = torch.einsum('nqc,tnjc->tnjq', exi_mat_inv, p3d_homo)
-
+                #world_norm_3d_trj.shape:torch.Size([2478, 4, 17, 3])
                 for cam in range(N_cam):
                     self.r_keypoints[subject][action][cam][:,:,[2, 3]] = cam_norm_3d_trj[:,cam,:,:2]
                 
@@ -744,7 +841,3 @@ class Human36mCamDataset(MocapDataset):
     def get_norm(self):
         return self.max_norm
                     
-                
-                
-                
-                

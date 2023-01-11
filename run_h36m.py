@@ -25,12 +25,12 @@ from common.multiview_model import get_models
 from common.loss import *
 from common.generators import *
 from common.data_augmentation_multi_view import *
-from common.h36m_dataset import Human36mCamera, Human36mDataset
+from common.h36m_dataset import Human36mCamera, Human36mDataset, Human36mCamDataset
 from common.set_seed import *
 from common.config import config as cfg
 from common.config import reset_config, update_config
 from common.vis import *
-
+dataset_path = '../MHFormer/dataset/data_3d_h36m.npz'
 set_seed()
 
 args = parse_args()
@@ -41,7 +41,6 @@ os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(cfg.GPU)
 
 print('p2d detector:{}'.format('gt_p2d' if cfg.DATA.USE_GT_2D else cfg.H36M_DATA.P2D_DETECTOR))
 HumanCam = Human36mCamera(cfg)
-
 
 keypoints = {}
 for sub in [1, 5, 6, 7, 8, 9, 11]:
@@ -58,6 +57,9 @@ for sub in [1, 5, 6, 7, 8, 9, 11]:
 
 kps_left, kps_right = list(keypoints_symmetry[0]), list(keypoints_symmetry[1])
 joints_left, joints_right = [kps_left, kps_right]
+
+#HumanData = Human36mDataset(cfg, keypoints)
+#HumanCamData = Human36mCamDataset(keypoints)
 
 N_frame_action_dict = {
 2699:'Directions',2356:'Directions',1552:'Directions',
@@ -93,13 +95,14 @@ if cfg.H36M_DATA.P2D_DETECTOR == 'cpn' or cfg.H36M_DATA.P2D_DETECTOR == 'gt':
 elif cfg.H36M_DATA.P2D_DETECTOR[:3] == 'ada':
     vis_score = pickle.load(open('./data/vis_ada.pkl', 'rb'))
 
-def fetch(subjects, action_filter=None,  parse_3d_poses=True, is_test = False):
+def fetch(subjects, action_filter=None,  parse_3d_poses=True, is_test = False, out_plus = False):
     out_poses_3d = []
     out_poses_2d_view1 = []
     out_poses_2d_view2 = []
     out_poses_2d_view3 = []
     out_poses_2d_view4 = []
     out_camera_params = []
+    out_poses_3d = []
     out_subject_action = []
     used_cameras = cfg.H36M_DATA.TEST_CAMERAS if is_test else cfg.H36M_DATA.TRAIN_CAMERAS
     for subject in subjects:
@@ -112,7 +115,9 @@ def fetch(subjects, action_filter=None,  parse_3d_poses=True, is_test = False):
                         break
                 if not found:
                     continue
-                
+            
+            poses_3d = HumanCam._data[subject][action]['positions']
+            cam_info = HumanCam._data[subject][action]['cameras']
             poses_2d = keypoints[subject][action]
             out_subject_action.append([subject, action])
             n_frames = poses_2d[0].shape[0]
@@ -141,6 +146,7 @@ def fetch(subjects, action_filter=None,  parse_3d_poses=True, is_test = False):
                 out_poses_2d_view2.append(np.concatenate((poses_2d[1], vis_score_cam1), axis =-1))
                 out_poses_2d_view3.append(np.concatenate((poses_2d[2], vis_score_cam2), axis =-1))
                 out_poses_2d_view4.append(np.concatenate((poses_2d[3], vis_score_cam3), axis =-1))
+            out_poses_3d.append(poses_3d)
 
     
     final_pose = []
@@ -153,10 +159,17 @@ def fetch(subjects, action_filter=None,  parse_3d_poses=True, is_test = False):
     if 3 in used_cameras:
         final_pose.append(out_poses_2d_view4)
         
+    
     if is_test is True:
-        return final_pose
+        if out_plus == True:
+            return final_pose, out_poses_3d
+        else:
+            return final_pose
     else:
-        return final_pose, out_subject_action
+        if out_plus == True:
+            return final_pose, out_subject_action, out_poses_3d
+        else:
+            return final_pose, out_subject_action
 
 use_2d_gt = cfg.DATA.USE_GT_2D
 receptive_field = cfg.NETWORK.TEMPORAL_LENGTH
@@ -249,6 +262,7 @@ if True:
         summary_writer = None
     
     poses_train_2d, subject_action = fetch(cfg.H36M_DATA.SUBJECTS_TRAIN, train_actions)
+    _, _, poses_3d_extra = fetch(cfg.H36M_DATA.SUBJECTS_TRAIN, train_actions, out_plus = True)
 
     lr = cfg.TRAIN.LEARNING_RATE
     if cfg.TRAIN.RESUME:
@@ -276,7 +290,7 @@ if True:
     lr_decay = cfg.TRAIN.LR_DECAY
     initial_momentum = 0.1
     final_momentum = 0.001
-    train_generator = ChunkedGenerator(cfg.TRAIN.BATCH_SIZE, poses_train_2d, 1,pad=pad, causal_shift=causal_shift, shuffle=True, augment=True,kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right, sub_act=subject_action) if cfg.H36M_DATA.PROJ_Frm_3DCAM == True else ChunkedGenerator(cfg.TRAIN.BATCH_SIZE, poses_train_2d, 1,pad=pad, causal_shift=causal_shift, shuffle=True, augment=True,kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
+    train_generator = ChunkedGenerator(cfg.TRAIN.BATCH_SIZE, poses_train_2d, 1,pad=pad, causal_shift=causal_shift, shuffle=True, augment=False, kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right, sub_act=subject_action, extra_poses_3d=None) if cfg.H36M_DATA.PROJ_Frm_3DCAM == True else ChunkedGenerator(cfg.TRAIN.BATCH_SIZE, poses_train_2d, 1,pad=pad, causal_shift=causal_shift, shuffle=True, augment=True,kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
  
     print('** Starting.')
     
@@ -290,7 +304,7 @@ if True:
         model.train()
         process = tqdm(total = train_generator.num_batches)
 
-        for batch_2d, sub_action in train_generator.next_epoch():
+        for batch_2d, sub_action, batch_3d in train_generator.next_epoch():
             if EVAL:
                 break
             process.update(1)
@@ -334,6 +348,7 @@ if True:
             p3d_gt_ori = copy.deepcopy(pos_gt)
             p3d_root = copy.deepcopy(pos_gt[:,:,:1]) #(B,T, 1, 3, N)
             pos_gt[:,:,:1] = 0
+            p3d_gt_abs = pos_gt+p3d_root
             
             optimizer.zero_grad()
             inp = torch.cat((h36_inp, vis), dim = -2)
@@ -359,16 +374,62 @@ if True:
                     out, other_out, tran, pred_rot = model(inp, rotation) #mask:(B, 1, 1, 1, N, N)
             else:
                 out = model(inp, rotation)
+           
+            if cfg.TRAIN.PRJ_2DIM_TO_3DWD:
+                prj_2dpre_to_3d = HumanCam.p2d_cam3d_batch(h36_inp[:, pad:pad+1, :, :, :4], sub_action, view_list[:4], debug=False)
+                B, _, J, _, _ = h36_inp.shape
+                p_2dgt_to_3dcam = torch.zeros(B, 1, J, 3, 4)
+                p_2dgt_to_3dwd  = torch.zeros(B, 1, J, 3)
+                for inx, sub_ac in enumerate(sub_action):
+                    p_2dgt_to_3dcam[inx], p_2dgt_to_3dwd[inx]  =  HumanCam.p2d_cam3d(inp[inx:inx+1, pad:pad+1, :, :2, :4], sub_ac[0], view_list[:4], debug=True)
+                prj_3dcam_to_3dwd = HumanCam.p3dcam_3dwd_batch(prj_2dpre_to_3d, sub_action, view_list[:4])
+                prj_2dim_3dwd = HumanCam.p2d_world3d_batch(h36_inp[:,pad:pad+1], sub_action, view_list).to(out.device)
+                prj_2dim_3dwd_gt = HumanCam.p2d_world3d_batch(pos_gt_2d, sub_action, view_list).to(out.device)
+                pri_3dcam_gt_to_3dwd = HumanCam.p3dcam_3dwd_batch(p3d_gt_abs[:, pad:pad+1], sub_action, view_list)
+                pose_3d_gt_extra = torch.from_numpy(batch_3d[:,pad:pad+1,:,:]).to(out.device)
+                prj_3dwd_to_3dcam_gt = HumanCam.p3dwd_p3dcam_batch(pose_3d_gt_extra.squeeze(), sub_action, view_list)
+                print(mpjpe(pos_gt[:,pad:pad+1,...,:4].squeeze().permute(0,3,1,2), prj_3dwd_to_3dcam_gt))
+                loss_wdgt1 = msefun(pose_3d_gt_extra, pri_3dcam_gt_to_3dwd[0,0])
+                #loss_wdgt2 = msefun(pose_3d_gt_extra, prj_2dim_3dwd_gt[0,pad:pad+1].to(out.device))
+                triangu_loss = mpjpe(prj_2dpre_to_3d.to(out.device), out[...,:4])
+                if summary_writer is not None:
+                    summary_writer.add_scalar("triangu_loss/iter", triangu_loss, iters)
+            else:
+                triangu_loss = 0
+            print('triangu_loss is {}'.format(triangu_loss))
             
             if cfg.H36M_DATA.PROJ_Frm_3DCAM == True:
-                p3d_gt_abs = pos_gt+p3d_root
+                data_gt_extra = np.load('../MHFormer/dataset/data_3d_h36m.npz', allow_pickle=True)
                 prj_3dpre_to_2d = HumanCam.p3d_im2d_batch(out+p3d_root[:, pad:pad+1], sub_action, view_list, with_distor=True)
-                #prj_3dgt_rela_to_2d = HumanCam.p3d_im2d_batch(p3d_gt_ori[:, pad:pad+1], sub_action, view_list, with_distor=True)
-                #prj_3dgt_abs_to_2d = HumanCam.p3d_im2d_batch(p3d_gt_abs[:, pad:pad+1], sub_action, view_list, with_distor=False)
-                #prj_2dgt_to_3d = HumanCam.p2d_cam3d_batch(inputs_2d_gt[:, pad:pad+1, :, :], sub_action, view_list[:4], debug=True)
+                if cfg.TRAIN.TEMPORAL_SMOOTH_LOSS_WEIGHT is not None:
+                    prj_3dpre_to_2d_full = HumanCam.p3d_im2d_batch(out_full+p3d_root, sub_action, view_list, with_distor=True) 
+                prj_3dgt_abs_to_2d = HumanCam.p3d_im2d_batch(p3d_gt_abs[:, pad:pad+1], sub_action, view_list, with_distor=True)
+                prj_2dgt_to_3d = HumanCam.p2d_cam3d_batch(inputs_2d_gt[:, pad:pad+1, :, :], sub_action, view_list[:4], debug=True)
+                print(mpjpe(pos_gt[:, pad:pad+1,...,:4], prj_2dgt_to_3d.to(out.device)), mpjpe(prj_3dgt_abs_to_2d.permute(0,2,3,4,1), inputs_2d_gt[:, pad:pad+1, :, :].to(out.device)))
+
+            
+            loss_consis_wd = 0
+            loss_consis_weight = cfg.TRAIN.CONSIS_LOSS_WEIGHT if cfg.TRAIN.VISI_WEIGHT==False else vis[:,pad:pad+1,:,:,:4].permute(0,4,1,2,3).to(out.device)
             if cfg.TRAIN.PROJ_3DCAM_TO_3DWD:
                 pri_3dcam_pre_to_3dwd = HumanCam.p3dcam_3dwd_batch(out+p3d_root[:, pad:pad+1], sub_action, view_list)
                 pri_3dcam_gt_to_3dwd = HumanCam.p3dcam_3dwd_batch(p3d_gt_abs[:, pad:pad+1], sub_action, view_list)
+                pair_loss = torch.zeros(6)
+                for inx, _view_list in enumerate(itertools.combinations(list(range(len(cfg.H36M_DATA.TRAIN_CAMERAS))), 2)):
+                    pair_loss[inx] = msefun(pri_3dcam_pre_to_3dwd[:,_view_list[0]], pri_3dcam_pre_to_3dwd[:,view_list[1]])
+                wd3d_pair_loss = pair_loss.mean()
+                if cfg.TRAIN.PRJ_3DWD_TO_2DIM:
+                    p3dwd_pre_avg = torch.mean(pri_3dcam_pre_to_3dwd, dim=1) if not cfg.TRAIN.TAKE_OUT_AS_3DWD else torch.mean((out+p3d_root[:, pad:pad+1]).permute(0,4,1,2,3).squeeze()[:,cfg.H36M_DATA.TRAIN_CAMERAS], dim=1)
+                    #p3dwd_gt_avg = torch.mean(pri_3dcam_gt_to_3dwd, dim=1)
+                    prj_3dwd_to_3dcam_pre = HumanCam.p3dwd_p3dcam_batch(p3dwd_pre_avg, sub_action, view_list)
+                    #prj_3dwd_to_3dcam_gt, prj_3dwd_to_2dim_gt = HumanCam.p3dwd_p3dcam_batch(p3dwd_gt_avg, sub_action, view_list, True)
+                    prj_3dwd_to_2dim_w_disr = HumanCam.p3d_im2d_batch(prj_3dwd_to_3dcam_pre.permute(0,2,3,1), sub_action, view_list, with_distor=True)
+                    #prj_3dwd_to_2dim_w_disr_gt = HumanCam.p3d_im2d_batch(prj_3dwd_to_3dcam_gt.permute(0,2,3,1), sub_action, view_list, with_distor=True)
+                    #prj_3dwd_to_2dim_gt = HumanCam.p3dwd_p2dim_batch(pri_3dcam_gt_to_3dwd_avg, sub_action, view_list)
+                    #prj_3dcam_to_2dim_gt = HumanCam.p3d_im2d_batch(prj_3dwd_to_3dcam_gt, sub_action, view_list)
+                    loss_consis_wd = msefun(loss_consis_weight*prj_3dwd_to_2dim_w_disr,loss_consis_weight*pos_gt_2d.permute(0,4,1,2,3)[:,[0,1,2,3],pad:pad+1].to(out.device))
+                    if summary_writer is not None and cfg.TRAIN.UNSUPERVISE==True:
+                        summary_writer.add_scalar("loss_consis_wd/iter", loss_consis_wd, iters)
+                    print('Consis Loss in world->Image is {}'.format(loss_consis_wd))
 
             out = out.permute(0, 1, 4, 2,3).contiguous() #(B, T, N, J. C)
             pos_gt = pos_gt.permute(0, 1, 4,2, 3).contiguous()
@@ -376,7 +437,13 @@ if True:
                 for i in range(len(other_out)): 
                     other_out[i] = other_out[i].permute(0, 1, 4, 2,3).contiguous() #(B, T, N, J. C)
                 
-            loss = mpjpe(out , pos_gt[:,pad:pad+1]) if cfg.TRAIN.UNSUPERVISE==False else 0
+            loss_copy = mpjpe(out , pos_gt[:,pad:pad+1])
+            if summary_writer is not None and cfg.TRAIN.UNSUPERVISE==True:
+                summary_writer.add_scalar("loss_copy/iter", loss_copy, iters)
+            loss = loss_copy if cfg.TRAIN.UNSUPERVISE==False else 0
+            loss +=loss_consis_wd if cfg.TRAIN.CONSIS_LOSS_ADD else 0
+            loss +=triangu_loss
+            print('loss after add loss_consis_wd is {}'.format(loss))
             if summary_writer is not None:
                 summary_writer.add_scalar("loss_final/iter", loss, iters)
             if pred_rot is not None and cfg.TRAIN.USE_ROT_LOSS:
@@ -386,21 +453,34 @@ if True:
                     summary_writer.add_scalar("loss_tran/iter", tran_loss, iters)
                 loss = loss + cfg.TRAIN.ROT_LOSS_WEIGHT * tran_loss
             
-            loss_consis_weight = cfg.TRAIN.CONSIS_LOSS_WEIGHT
+            loss_consis_weight = cfg.TRAIN.CONSIS_LOSS_WEIGHT  if cfg.TRAIN.VISI_WEIGHT==False else vis[:,pad:pad+1,:,:,:4]
             loss_consis = 0
-            if cfg.H36M_DATA.PROJ_Frm_3DCAM == True:
-                prj_3dpre_to_2d = prj_3dpre_to_2d.permute(0,2,3,4,1).contiguous()
-                loss_consis = msefun(prj_3dpre_to_2d, pos_gt_2d[:, pad:pad+1, :, :, [0,1,2,3]].to(prj_3dpre_to_2d.device))
-                print('Consistancy Loss is {}'.format(loss_consis))
-                print('Supervised Loss is {}'.format(loss))
-                loss = loss  + loss_consis_weight * loss_consis if cfg.TRAIN.CONSIS_LOSS_ADD==True else loss
+            if (cfg.H36M_DATA.PROJ_Frm_3DCAM == True) & (cfg.TRAIN.PROJ_3DCAM_TO_3DWD == False):
+                if cfg.TRAIN.TEMPORAL_SMOOTH_LOSS_WEIGHT is not None:
+                    prj_3dpre_to_2d_full = prj_3dpre_to_2d_full.permute(0,2,3,4,1).contiguous()
+                prj_3dpre_to_2d = prj_3dpre_to_2d.permute(0,2,3,4,1).contiguous() if cfg.TRAIN.TEMPORAL_SMOOTH_LOSS_WEIGHT is None else prj_3dpre_to_2d_full[:,pad:pad+1]
+                loss_consis = msefun(prj_3dpre_to_2d, pos_gt_2d[:, pad:pad+1, :, :, [0,1,2,3]].to(prj_3dpre_to_2d.device)) if cfg.TRAIN.VISI_WEIGHT==False else msefun(torch.mul(prj_3dpre_to_2d, loss_consis_weight.to(prj_3dpre_to_2d.device)), torch.mul(pos_gt_2d[:, pad:pad+1, :, :, [0,1,2,3]].to(prj_3dpre_to_2d.device), loss_consis_weight.to(prj_3dpre_to_2d.device)))
+                if cfg.TRAIN.TEMPORAL_SMOOTH_LOSS_WEIGHT is not None:
+                    loss_consis +=wd3d_pair_loss
+                    print('wd3d_pair_loss is {}'.format(wd3d_pair_loss)) 
+                print('Consistancy Loss in Camera->image is {}'.format(loss_consis))
+                if cfg.TRAIN.VISI_WEIGHT==False:
+                    loss = loss  + loss_consis_weight * loss_consis if cfg.TRAIN.CONSIS_LOSS_ADD==True else loss
+                else:
+                    loss = loss + loss_consis if cfg.TRAIN.CONSIS_LOSS_ADD==True else loss
                 print('Summed Loss is {}'.format(loss))
                 summary_writer.add_scalar("loss_consis/iter", loss_consis, iters)
             
             if cfg.TRAIN.TEMPORAL_SMOOTH_LOSS_WEIGHT is not None:
-                weight_smooth = cfg.TRAIN.TEMPORAL_SMOOTH_LOSS_WEIGHT * 1/len(cfg.H36M_DATA.TRAIN_CAMERAS)
-                print('Here is temporal smoothness loss!')
-                smooth_err = weight_smooth * msefun(out_full[:,1:], out_full[:,:-1])
+                smooth_err_2d = msefun(prj_3dpre_to_2d_full[:,:,1:],  prj_3dpre_to_2d_full[:,:,:-1])
+                smooth_target = msefun(inputs_2d_pre[:,1:], inputs_2d_pre[:,:-1])
+                err_bwt_full_mid = msefun(out, out_full.permute(0,1,4,2,3)[:,pad:pad+1])
+                #weight_smooth = cfg.TRAIN.TEMPORAL_SMOOTH_LOSS_WEIGHT * 1/len(cfg.H36M_DATA.TRAIN_CAMERAS)
+                #smooth_err_3d = msefun(out_full[:,1:], out_full.permute(0,1,4,2,3)[:,:-1])
+                smooth_err = (smooth_err_2d - smooth_target) if cfg.TRAIN.ERR_BTW_FULL_MID==False else (smooth_err_2d - smooth_target) + err_bwt_full_mid
+                print('Smooth_err is {}'.format(smooth_err))
+                summary_writer.add_scalar("smooth_err/iter", smooth_err, iters)
+                loss += smooth_err if cfg.TRAIN.SMOOTH_LOSS_ADD else 0
 
             inter_loss_weight = cfg.TRAIN.INTER_LOSS_WEIGHT
             inter_loss_all = 0
@@ -422,11 +502,12 @@ if True:
                     summary_writer.add_scalar("loss_mv_loss/iter", mv_loss, iters)
 
             loss_total = loss
+            print('Final Loss is {}'.format(loss_total))
             if cfg.TRAIN.USE_INTER_LOSS:
                 loss_total = loss_total + inter_loss_all 
             if cfg.TRAIN.USE_MV_LOSS and epoch >= 0:
                 loss_total = loss_total + mv_loss_all 
-                
+            print('Loss_total is {}'.format(loss_total)) 
             loss_total.backward()
 
             optimizer.step()
@@ -464,8 +545,8 @@ if True:
                             for act in vis_actions if EVAL else actions:
                                 poses_valid_2d = fetch([valid_subject], [act], is_test =True)
 
-                                test_generator = ChunkedGenerator(cfg.TEST.BATCH_SIZE, poses_valid_2d, 1,pad=pad_t, causal_shift=causal_shift, shuffle=False, augment=False,kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
-                                for batch_2d, _ in test_generator.next_epoch():
+                                test_generator = ChunkedGenerator(cfg.TEST.BATCH_SIZE, poses_valid_2d, 1,pad=pad_t, causal_shift=causal_shift, shuffle=False, augment=False,kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right, extra_poses_3d=poses_3d_extra)
+                                for batch_2d, _, _ in test_generator.next_epoch():
                                     inputs = torch.from_numpy(batch_2d.astype('float32'))
                                     inputs_2d_gt = inputs[...,:2,:]
                                     inputs_2d_pre = inputs[...,2:4,:]
@@ -573,6 +654,8 @@ if True:
                     epoch_loss_valid += tmp[-1] / len(action_frames)
                 epoch_loss_valid /= len(cfg.TEST.NUM_VIEWS)
                 print('t_len:{} avg:{:.3f}'.format(t_len, epoch_loss_valid))
+                if summary_writer is not None:
+                        summary_writer.add_scalar("epoch_loss_valid/epoch", epoch_loss_valid, epoch)
                 
             if EVAL:
                 eval_elapsed = (time.time() - eval_start_time)/60

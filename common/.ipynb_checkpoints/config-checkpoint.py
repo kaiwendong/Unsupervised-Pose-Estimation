@@ -38,9 +38,14 @@ config.TRAIN.RESUME_CHECKPOINT = "./checkpoint/"
 config.TRAIN.PROJ_3DCAM_TO_3DWD = False
 config.TRAIN.CONSIS_LOSS_WEIGHT = 0.1
 config.TRAIN.TEMPORAL_SMOOTH_LOSS_WEIGHT = None
-config.TRAIN.CONSIS_LOSS_ADD = False # if true then 
+config.TRAIN.CONSIS_LOSS_ADD = False # if true then
+config.TRAIN.VISI_WEIGHT = False
 config.TRAIN.UNSUPERVISE = False    #if true then abandent the loss from ground truth target.
-
+config.TRAIN.ERR_BTW_FULL_MID = False
+config.TRAIN.SMOOTH_LOSS_ADD = False
+config.TRAIN.PRJ_3DWD_TO_2DIM = False
+config.TRAIN.TAKE_OUT_AS_3DWD = False
+config.TRAIN.PRJ_2DIM_TO_3DWD = False
 
 #Network
 config.NETWORK = edict()
