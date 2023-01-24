@@ -290,7 +290,7 @@ if True:
     lr_decay = cfg.TRAIN.LR_DECAY
     initial_momentum = 0.1
     final_momentum = 0.001
-    train_generator = ChunkedGenerator(cfg.TRAIN.BATCH_SIZE, poses_train_2d, 1,pad=pad, causal_shift=causal_shift, shuffle=True, augment=False, kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right, sub_act=subject_action, extra_poses_3d=None) if cfg.H36M_DATA.PROJ_Frm_3DCAM == True else ChunkedGenerator(cfg.TRAIN.BATCH_SIZE, poses_train_2d, 1,pad=pad, causal_shift=causal_shift, shuffle=True, augment=True,kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
+    train_generator = ChunkedGenerator(cfg.TRAIN.BATCH_SIZE, poses_train_2d, 1,pad=pad, causal_shift=causal_shift, shuffle=True, augment=True, kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right, sub_act=subject_action, extra_poses_3d=None) if cfg.H36M_DATA.PROJ_Frm_3DCAM == True else ChunkedGenerator(cfg.TRAIN.BATCH_SIZE, poses_train_2d, 1,pad=pad, causal_shift=causal_shift, shuffle=True, augment=True,kps_left=kps_left, kps_right=kps_right, joints_left=joints_left, joints_right=joints_right)
  
     print('** Starting.')
     
@@ -304,7 +304,7 @@ if True:
         model.train()
         process = tqdm(total = train_generator.num_batches)
 
-        for batch_2d, sub_action, batch_3d in train_generator.next_epoch():
+        for batch_2d, sub_action, batch_flip in train_generator.next_epoch():
             if EVAL:
                 break
             process.update(1)
@@ -397,17 +397,14 @@ if True:
             else:
                 triangu_loss = 0
             print('triangu_loss is {}'.format(triangu_loss))
-            
             if cfg.H36M_DATA.PROJ_Frm_3DCAM == True:
                 data_gt_extra = np.load('../MHFormer/dataset/data_3d_h36m.npz', allow_pickle=True)
-                prj_3dpre_to_2d = HumanCam.p3d_im2d_batch(out+p3d_root[:, pad:pad+1], sub_action, view_list, with_distor=True)
-                if cfg.TRAIN.TEMPORAL_SMOOTH_LOSS_WEIGHT is not None:
-                    prj_3dpre_to_2d_full = HumanCam.p3d_im2d_batch(out_full+p3d_root, sub_action, view_list, with_distor=True) 
-                prj_3dgt_abs_to_2d = HumanCam.p3d_im2d_batch(p3d_gt_abs[:, pad:pad+1], sub_action, view_list, with_distor=True)
+                #prj_3dpre_to_2d = HumanCam.p3d_im2d_batch(out+p3d_root[:, pad:pad+1], sub_action, view_list, with_distor=True, flip=batch_flip)
+                #if cfg.TRAIN.TEMPORAL_SMOOTH_LOSS_WEIGHT is not None:
+                #prj_3dpre_to_2d_full = HumanCam.p3d_im2d_batch(out_full+p3d_root, sub_action, view_list, with_distor=True) 
+                prj_3dgt_abs_to_2d = HumanCam.p3d_im2d_batch(p3d_gt_abs[:, pad:pad+1], sub_action, view_list, with_distor=True, flip=batch_flip)
                 prj_2dgt_to_3d = HumanCam.p2d_cam3d_batch(inputs_2d_gt[:, pad:pad+1, :, :], sub_action, view_list[:4], debug=True)
                 print(mpjpe(pos_gt[:, pad:pad+1,...,:4], prj_2dgt_to_3d.to(out.device)), mpjpe(prj_3dgt_abs_to_2d.permute(0,2,3,4,1), inputs_2d_gt[:, pad:pad+1, :, :].to(out.device)))
-
-            
             loss_consis_wd = 0
             loss_consis_weight = cfg.TRAIN.CONSIS_LOSS_WEIGHT if cfg.TRAIN.VISI_WEIGHT==False else vis[:,pad:pad+1,:,:,:4].permute(0,4,1,2,3).to(out.device)
             if cfg.TRAIN.PROJ_3DCAM_TO_3DWD:

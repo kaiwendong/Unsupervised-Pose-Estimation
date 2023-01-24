@@ -210,7 +210,7 @@ class ChunkedGenerator(Dataset):
                 
                 if self.sub_act is not None:
                     print('self.batch_2d.shape: {}; Length of self.label_sub_act is {}'.format(self.batch_2d.shape, len(self.label_sub_act)))
-                    yield self.batch_2d[:len(chunks)], self.label_sub_act[:len(chunks)], None
+                    yield self.batch_2d[:len(chunks)], self.label_sub_act[:len(chunks)], self.batch_flip[:len(chunks)]
                 else:
                     # if self.extra_poses_3d is not None:
                     #     yield self.batch_2d[:len(chunks)], self.batch_3d[:len(chunks)], self.batch_flip[:len(chunks)]
