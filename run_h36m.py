@@ -398,8 +398,8 @@ if True:
                 triangu_loss = 0
             print('triangu_loss is {}'.format(triangu_loss))
             if cfg.H36M_DATA.PROJ_Frm_3DCAM == True:
-                data_gt_extra = np.load('../MHFormer/dataset/data_3d_h36m.npz', allow_pickle=True)
-                #prj_3dpre_to_2d = HumanCam.p3d_im2d_batch(out+p3d_root[:, pad:pad+1], sub_action, view_list, with_distor=True, flip=batch_flip)
+                #data_gt_extra = np.load('../MHFormer/dataset/data_3d_h36m.npz', allow_pickle=True)
+                prj_3dpre_to_2d = HumanCam.p3d_im2d_batch(out, sub_action, view_list, with_distor=True, flip=batch_flip)
                 #if cfg.TRAIN.TEMPORAL_SMOOTH_LOSS_WEIGHT is not None:
                 #prj_3dpre_to_2d_full = HumanCam.p3d_im2d_batch(out_full+p3d_root, sub_action, view_list, with_distor=True) 
                 prj_3dgt_abs_to_2d = HumanCam.p3d_im2d_batch(p3d_gt_abs[:, pad:pad+1], sub_action, view_list, with_distor=True, flip=batch_flip)
@@ -408,7 +408,7 @@ if True:
             loss_consis_wd = 0
             loss_consis_weight = cfg.TRAIN.CONSIS_LOSS_WEIGHT if cfg.TRAIN.VISI_WEIGHT==False else vis[:,pad:pad+1,:,:,:4].permute(0,4,1,2,3).to(out.device)
             if cfg.TRAIN.PROJ_3DCAM_TO_3DWD:
-                pri_3dcam_pre_to_3dwd = HumanCam.p3dcam_3dwd_batch(out+p3d_root[:, pad:pad+1], sub_action, view_list)
+                pri_3dcam_pre_to_3dwd = HumanCam.p3dcam_3dwd_batch(out, sub_action, view_list)
                 pri_3dcam_gt_to_3dwd = HumanCam.p3dcam_3dwd_batch(p3d_gt_abs[:, pad:pad+1], sub_action, view_list)
                 pair_loss = torch.zeros(6)
                 for inx, _view_list in enumerate(itertools.combinations(list(range(len(cfg.H36M_DATA.TRAIN_CAMERAS))), 2)):

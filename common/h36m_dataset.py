@@ -316,7 +316,7 @@ def triangulation(pts, pmat):
     return Xs
 
 def flip_data(batch_data):
-    data_copy = copy.deepcopy(batch_data)
+    data_copy = batch_data.detach()
     kps_right = [1, 2, 3, 14, 15, 16]
     kps_left = [4, 5, 6, 11, 12, 13]
     data_copy[:, :, :, 0] *= -1
@@ -522,12 +522,12 @@ class Human36mCamera(MocapDataset):
             p_2d = (p_2d/p_2d[:,:,:,-1].unsqueeze(3))[:,:,:,:2]
         else:
             p3d = p3d.permute(0, 4, 1, 2, 3)
-            p3d_copy = copy.deepcopy(p3d)
+            p3d_copy = p3d.detach()
             p3d_flip = p3d[flip_idx]
             p3d = p3d.contiguous().view((-1, T, J, C)).contiguous()
             p3d_flip = p3d_flip.contiguous().view((-1, T, J, C)).contiguous()
             intri_mat_ori = self.camera_set[subject[0][0]]['intrin']  # [4, 9]
-            intri_mat = copy.deepcopy(intri_mat_ori).repeat([B, 1, 1]).view((-1, 9)).contiguous().to(p3d.device)  # [B*4, 9]
+            intri_mat = intri_mat_ori.detach().repeat([B, 1, 1]).view((-1, 9)).contiguous().to(p3d.device)  # [B*4, 9]
             p_2d = project_to_2d(p3d, intri_mat)
             p_2d = p_2d.unsqueeze(0).view((B, N, T, J, 2)).contiguous()
             '''
