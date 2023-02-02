@@ -19,6 +19,7 @@ from common.quaternion import qrot, qinverse
 from common.loss import *
 from common.multiview import Camera, project_3d_points_to_image_plane_without_distortion
 from common.skeleton import Skeleton
+from common.loss import mpjpe
 
 h36m_skeleton = Skeleton(parents=[-1, 0, 1, 2, 3, 4, 0, 6, 7, 8, 9, 0, 11, 12, 13, 14, 12,
                                   16, 17, 18, 19, 20, 19, 22, 12, 24, 25, 26, 27, 28, 27, 30],
@@ -316,7 +317,8 @@ def triangulation(pts, pmat):
     return Xs
 
 def flip_data(batch_data):
-    data_copy = batch_data.detach()
+    data_leaf = batch_data.detach()
+    data_copy = copy.deepcopy(data_leaf)
     kps_right = [1, 2, 3, 14, 15, 16]
     kps_left = [4, 5, 6, 11, 12, 13]
     data_copy[:, :, :, 0] *= -1
@@ -536,27 +538,26 @@ class Human36mCamera(MocapDataset):
             intri_mat_flip = intri_mat_flip.repeat([len(flip_idx), 1, 1]).view((-1, 9)).contiguous().to(p3d.device)
             p_2d_flip = project_to_2d(p3d_flip, intri_mat_flip)
             p_2d_flip = p_2d_flip.unsqueeze(0).view((len(flip_idx), N, T, J, 2)).contiguous()
-            if gt_2d is not None:
-                from common.loss import mpjpe
-                print(gt_2d.shape)
-                gt_2d_flip = gt_2d[flip_idx]
-                gt_2d_unflip = gt_2d[unflip_idx]
-                p_2d_unflip = p_2d[unflip_idx]
-                flip = flip_data(p3d[unflip_idx])
-                flip_flip = flip_data(flip)
-                visulization(0, p3d[unflip_idx])
-                visulization(0, flip.cpu(), name='flip')
-                visulization(0, flip_flip.cpu(), name='flip_flip')
-                '''
-            if len(flip)!=0:
+            '''
+            if len(flip_idx)!=0:
                 intri_mat_flip = intri_mat_ori.repeat([len(flip_idx), 1, 1]).view((-1, 9)).contiguous().to(p3d.device)
                 p3d_flip_back = flip_data(p3d_flip)
                 p2d_flip_back = project_to_2d(p3d_flip_back, intri_mat_flip)
                 p2d_flip = flip_data(p2d_flip_back)
                 p2d_flip = p2d_flip.unsqueeze(0).view((len(flip_idx), N, T, J, 2)).contiguous()
-                #print("Fliped loss is {}; Unfliped loss is {}".format(mpjpe(p2d_flip.permute(0,2,3,4,1), gt_2d_flip), mpjpe(p_2d_unflip.permute(0,2,3,4,1),gt_2d_unflip)))
+                if gt_2d is not None:
+                    gt_2d_flip = gt_2d[flip_idx]
+                    gt_2d_unflip = gt_2d[unflip_idx]
+                    p_2d_unflip = p_2d[unflip_idx]
+                    flip1 = flip_data(p3d_flip)
+                    flip_flip = flip_data(flip1)
+                    visulization(0, p3d_flip)
+                    visulization(0, flip1.cpu(), name='flip')
+                    visulization(0, flip_flip.cpu(), name='flip_flip')
+                    print("Fliped loss is {}; Unfliped loss is {}".format(mpjpe(p2d_flip.permute(0,2,3,4,1), gt_2d_flip), mpjpe(p_2d_unflip.permute(0,2,3,4,1),gt_2d_unflip)))
                 p_2d[flip_idx] = p2d_flip
-                #print(mpjpe(p_2d.permute(0,2,3,4,1), gt_2d))
+                if gt_2d is not None:
+                    print(mpjpe(p_2d.permute(0,2,3,4,1), gt_2d))
         return p_2d
     def p3dcam_3dwd_batch(self, p3d, subject, view_list):
         #p3d: 3d poses in camera space
