@@ -77,6 +77,7 @@ class fuse_views_mht(nn.Module):
         self.T = cfg.NETWORK.TEMPORAL_LENGTH
         N_before_mhf = cfg.NETWORK.NUM_CHANNELS // cfg.NETWORK.TRANSFORM_DIM
         N_after_mhf = cfg.NETWORK.AFTER_MHF_DIM // cfg.NETWORK.TRANSFORM_DIM
+        N = cfg.NETWORK.NUM_CHANNELS // cfg.NETWORK.TRANSFORM_DIM
         # pre-embeding hidden_dim from num_joints*2 to hidden/2
         self.pre_embedding = pre_proj(cfg, in_N=num_joints, h_N=N_before_mhf, dropout=dropout, is_train=is_train)
         # proposed mhf
@@ -108,7 +109,23 @@ class fuse_views_mht(nn.Module):
                     self.tran_shrink = RotShrink(cfg, N=N, channels=cfg.NETWORK.NUM_CHANNELS,
                                                  dropout=cfg.NETWORK.DROPOUT, dim_joint=3, is_train=is_train,
                                                  num_joints=num_joints)
+        if self.cfg.TRAIN.LEARN_CAM_PARM==True:
+            Sub_hub = self.cfg.H36M_DATA.SUBJECTS_TRAIN + self.cfg.H36M_DATA.SUBJECTS_TEST           
+            N_Sub = len(Sub_hub)
+            N_cam = len(self.cfg.H36M_DATA.TRAIN_CAMERAS)
+            self.learn_r = torch.rand(N_Sub, N_cam, 3, 3)
+            self.learn_t = torch.rand(N_Sub, N_cam, 3)
 
+            self.learn_exi_mat = torch.zeros(N_Sub, N_cam, 3, 4)
+            self.learn_exi_mat[...,:3] = self.learn_r
+            self.learn_exi_mat[...,-1] = torch.einsum('snjc,snkc->snk',  -self.learn_t.view(N_Sub, 4, 1, 3), self.learn_r)
+            self.learn_exi_mat = self.learn_exi_mat.requires_grad_(True)
+
+            self.learn_exi_mat_inv = torch.rand(N_Sub, N_cam, 3, 4)
+            self.learn_exi_mat_inv[...,:3] = self.learn_r.permute(0, 1, 3, 2)
+            self.learn_exi_mat_inv[...,-1] = self.learn_t.view(N_Sub, 4, 3)
+            self.learn_exi_mat_inv = self.learn_exi_mat_inv.requires_grad_(True)
+            
     def set_bn_momentum(self, momentum):
         ####fuse_model
         if self.cfg.NETWORK.USE_MFT:

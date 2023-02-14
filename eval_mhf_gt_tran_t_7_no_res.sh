@@ -1,1 +1,1 @@
-python -m pdb run_h36m.py --cfg ./cfg/submit/mht_gt_trans_t_7_no_res.yaml --eval --checkpoint ./checkpoint/submit/mht_gt_trans_t_7_no_res_2022-11-09-13-17/model.bin --gpu 0 --n_frames 7  --eval_batch_size 360 --eval_n_frames 7 #--triangulate #--vis_debug --vis_2d
+python -m pdb run_h36m.py --cfg ./cfg/submit/mht_gt_trans_t_7_no_res.yaml --eval --checkpoint ./checkpoint/submit/mht_gt_trans_t_7_no_res_absolute_2023-02-07-16-26/model.bin --gpu 0 --n_frames 7  --eval_batch_size 360 --eval_n_frames 7 #--triangulate #--vis_debug --vis_2d

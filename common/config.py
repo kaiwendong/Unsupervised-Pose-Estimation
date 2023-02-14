@@ -46,6 +46,12 @@ config.TRAIN.SMOOTH_LOSS_ADD = False
 config.TRAIN.PRJ_3DWD_TO_2DIM = False
 config.TRAIN.TAKE_OUT_AS_3DWD = False
 config.TRAIN.PRJ_2DIM_TO_3DWD = False
+config.TRAIN.RELATIVE_GT = True
+config.TRAIN.WORLD_SPACE = False
+config.TRAIN.LEARN_CAM_PARM = False
+config.TRAIN.LOAD_SUB = False
+config.TRAIN.FLIP_AUG = True
+config.TRAIN.EXTRA_3D_GT = False
 
 #Network
 config.NETWORK = edict()
@@ -142,6 +148,7 @@ config.TEST.ALIGN_TRJ = True
 config.TEST.TRJ_ALIGN_R = True
 config.TEST.TRJ_ALIGN_T = False
 config.TEST.TRJ_ALIGN_S = True
+config.TEST.RELATIVE_GT = True
 
 #VIS
 config.VIS = edict()

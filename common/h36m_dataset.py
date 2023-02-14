@@ -559,21 +559,30 @@ class Human36mCamera(MocapDataset):
                 if gt_2d is not None:
                     print(mpjpe(p_2d.permute(0,2,3,4,1), gt_2d))
         return p_2d
-    def p3dcam_3dwd_batch(self, p3d, subject, view_list):
+    def p3dcam_3dwd_batch(self, p3d, subject, view_listi, learn_exi_mat_inv=None):
         #p3d: 3d poses in camera space
         #p_3dwd: returned 3d poses in world space
         p3d = p3d[..., self.cfg.H36M_DATA.TRAIN_CAMERAS]
         p3d = p3d.permute(0, 4, 1, 2, 3)
         B, N, T, J, C = p3d.shape
-        #extri_mat = torch.zeros(B, 4, 3, 4).unsqueeze(2).unsqueeze(3).permute(0,1,2,3,5,4)
         exi_mat_inv = torch.zeros(B, 4, 3, 4)
-        for inx, sub in enumerate(subject):
-            #print('Calling the {} exi_mat_inv of subject {}, {}'.format(inx, sub[0], sub[1]))
-            #self.camera_set[sub[0]]['exi_mat_inv'].shape: torch.Size([4, 3, 4])
-            exi_mat_inv[inx] = self.camera_set[sub[0]]['exi_mat_inv']
+        if self.cfg.TRAIN.LEARN_CAM_PARM:
+            exi_dic = {}
+            Sub_hub = self.cfg.H36M_DATA.SUBJECTS_TRAIN + self.cfg.H36M_DATA.SUBJECTS_TEST           
+            #N_Sub = len(Sub_hub)
+            #exi_mat_inv_l = torch.rand(N_Sub, 4, 3, 4)
+            #exi_mat_inv_l = torch.nn.Parameter(exi_mat_inv)
+            for i, sub in enumerate(Sub_hub):
+                exi_dic[sub] = learn_exi_mat_inv[i]
+            for inx, sub in enumerate(subject):
+                exi_mat_inv[inx] = exi_dic[sub[0]]
+        else:
+            for inx, sub in enumerate(subject):
+                #self.camera_set[sub[0]]['exi_mat_inv'].shape: torch.Size([4, 3, 4])
+                exi_mat_inv[inx] = self.camera_set[sub[0]]['exi_mat_inv']
         #len(extri_mat)=2; extri_mat[0].shape: torch.Size([4, 1, 1, 4, 3])
         #p3d.shape: torch.Size([2, 4, 1, 17, 3])
-        p_3dwd_homo = torch.cat((p3d.squeeze(), torch.ones(p3d.shape[0], N, J, 1).to(p3d.device)), dim = -1)
+        p_3dwd_homo = torch.cat((p3d.squeeze(2), torch.ones(p3d.shape[0], N, J, 1).to(p3d.device)), dim = -1)
         p_3dwd = torch.einsum('tnqc,tnjc->tnjq', exi_mat_inv.to(p3d.device), p_3dwd_homo)
 
         #p_3dwd_homo.shape: torch.Size([2, 4, 1, 17, 4])
@@ -602,13 +611,20 @@ class Human36mCamera(MocapDataset):
         p_2dim = p_2dim_homo[...,:2] / p_2dim_homo[...,-1:]
         p_2dim = p_2dim[...,:2]
         return p_2dim
-    def p3dwd_p3dcam_batch(self, p3d, subject, view_list):
+    def p3dwd_p3dcam_batch(self, p3d, subject, view_list, learn_exi_mat=None):
         B, J, C = p3d.shape
         exi_mat = torch.zeros(B, 4, 3, 4)
-        K = torch.zeros(B, 4, 3, 3)
-        for inx, sub in enumerate(subject):
-            exi_mat[inx] = self.camera_set[sub[0]]['exi_mat']
-            K[inx] = self.camera_set[sub[0]]['K']
+        if self.cfg.TRAIN.LEARN_CAM_PARM:
+            exi_dic = {}
+            Sub_hub = self.cfg.H36M_DATA.SUBJECTS_TRAIN + self.cfg.H36M_DATA.SUBJECTS_TEST
+            for i, sub in enumerate(Sub_hub):
+                exi_dic[sub] = learn_exi_mat[i]
+            for inx, sub in enumerate(subject):
+                exi_mat[inx] = exi_dic[sub[0]]
+        else:
+            for inx, sub in enumerate(subject):
+                exi_mat[inx] = self.camera_set[sub[0]]['exi_mat']
+        
         p_3d_homo = torch.cat((p3d, torch.ones(p3d.shape[0], 17, 1).to(p3d.device)), dim = -1)
         p_3d_homo = torch.as_tensor(p_3d_homo, dtype=torch.float32)
         p_3d_cam  = torch.einsum('mnkc,mjc->mnjk', exi_mat.to(p3d.device), p_3d_homo) #(T, N, J, 3)

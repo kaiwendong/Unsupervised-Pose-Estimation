@@ -183,20 +183,23 @@ def align_target_numpy(cfg, source, target):
     source = source.permute(0, 1, 4, 2, 3).contiguous().view(B*T*N, J, C) 
     target = target.permute(0, 1, 4, 2, 3).contiguous().view(B*T*N, J, C) 
     if type(source) == torch.Tensor:
+        
+        # source = source.cpu().detach().numpy()
+        # target = target.cpu().detach().numpy()
         source = source.numpy()
         target = target.numpy()
 
-    muX = np.mean(target, axis=1, keepdims=True)
-    muY = np.mean(source, axis=1, keepdims=True)
-    X0 = target - muX
-    Y0 = source - muY
+    muX = np.mean(target, axis=1, keepdims=True) #(B*T*N, 1, C)
+    muY = np.mean(source, axis=1, keepdims=True) #(B*T*N, 1, C)
+    X0 = target - muX #(B*T*N, J, C)
+    Y0 = source - muY #(B*T*N, J, C)
 
     normX = np.sqrt(np.sum(X0**2, axis=(1, 2), keepdims=True))
     normY = np.sqrt(np.sum(Y0**2, axis=(1, 2), keepdims=True))
-    X0 /= normX
-    Y0 /= normY
+    X0 /= normX #(B*T*N, J, C)
+    Y0 /= normY #(B*T*N, J, C)
     
-    H = np.matmul(X0.transpose(0, 2, 1), Y0) 
+    H = np.matmul(X0.transpose(0, 2, 1), Y0) #(B*T*N, C, C)
     U, s, Vt = np.linalg.svd(H)
     V = Vt.transpose(0, 2, 1)
     R = np.matmul(V, U.transpose(0, 2, 1))
@@ -225,6 +228,54 @@ def align_target_numpy(cfg, source, target):
 
     return source
 
+
+def align_target_torch(cfg, source, target):
+    '''
+    Args:
+        source : (B, T, J, C, N)
+        target : (B, T, J, C, N)
+    '''
+    B, T, J, C, N = source.shape
+    source = source.permute(0, 1, 4, 2, 3).contiguous().view(B*T*N, J, C) 
+    target = target.permute(0, 1, 4, 2, 3).contiguous().view(B*T*N, J, C).to(source.device)
+
+    muX = torch.mean(target, dim=1, keepdims=True) #(B*T*N, 1, C)
+    muY = torch.mean(source, dim=1, keepdims=True) #(B*T*N, 1, C)
+    X0 = target - muX #(B*T*N, J, C)
+    Y0 = source - muY #(B*T*N, J, C)
+
+    normX = torch.sqrt(torch.sum(X0**2, dim=(1, 2), keepdims=True))
+    normY = torch.sqrt(torch.sum(Y0**2, dim=(1, 2), keepdims=True))
+    X0 /= normX #(B*T*N, J, C)
+    Y0 /= normY #(B*T*N, J, C)
+    
+    H = torch.matmul(X0.permute(0, 2, 1), Y0) #(B*T*N, C, C)
+    U, s, Vt = torch.svd(H)
+    V = Vt.permute(0, 2, 1)
+    R = torch.matmul(V, U.permute(0, 2, 1))
+    
+    # Avoid improper rotations (reflections), i.e. rotations with det(R) = -1
+    sign_detR = torch.sign(torch.unsqueeze(torch.linalg.det(R), 1))
+    V[:, :, -1] *= sign_detR
+    s[:, -1] *= torch.flatten(sign_detR)
+    R = torch.matmul(V, U.permute(0, 2, 1)) # Rotation
+    
+    tr = torch.unsqueeze(torch.sum(s, dim=1, keepdims=True), 2)
+
+    a = tr * normX / normY # Scale
+    t = muX - a*torch.matmul(muY, R) # Translation
+    
+    # Perform rigid transformation on the input
+    if cfg.TEST.TRJ_ALIGN_R:
+        source = torch.matmul(source, R)
+    if cfg.TEST.TRJ_ALIGN_S:
+        source = a * source
+    if cfg.TEST.TRJ_ALIGN_T:
+        source = source + t
+    source = source.view(B, T, N, J, C).permute(0, 1, 3, 4, 2)  #B, T, J, C, N
+
+    return source
+
 def align_torch(source, target):
     '''
     Args:
@@ -234,6 +285,9 @@ def align_torch(source, target):
     '''
     
     device = source.device
+    B, T, J, C, N = source.shape
+    source = source.permute(0, 1, 4, 2, 3).contiguous().view(B*T*N, J, C) 
+    target = target.permute(0, 1, 4, 2, 3).contiguous().view(B*T*N, J, C) 
     assert len(source.shape) == 3
 
     muX = torch.mean(target, dim=1, keepdims=True)
