@@ -1,0 +1,10 @@
+RLBench/build/
+RLBench/rlbench.egg-info/
+RLBench/__pycache__/
+RLBench/.idea/
+PyRep/build/
+PyRep/cffi_build/
+PyRep/PyRep.egg-info/
+pose_obj_3d/checkpoint/
+pose_obj_3d/log/
+pose_obj_3d/data/

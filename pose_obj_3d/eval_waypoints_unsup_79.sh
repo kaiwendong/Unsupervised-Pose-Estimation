@@ -1,0 +1,1 @@
+python run_h36m_waypoints_unsup.py --cfg ./cfg/submit/config_u_waypoints_task_79.yaml --gpu 0  --eval --checkpoint /scratch/LS2N/riou_k/pose_obj_3d_/checkpoint/submit/config_u_waypoints_task_79_2023-02-16-13-41/model.bin --gpu 0 --n_frames 7 --eval_batch_size 10 --eval_n_frames 7

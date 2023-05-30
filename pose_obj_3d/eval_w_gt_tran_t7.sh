@@ -1,0 +1,1 @@
+python -m pdb run_h36m_full_pose.py --cfg ./cfg/submit/config_full_pose.yaml --gpu 0  --eval --checkpoint /home/lambda-ipi/pose3d/pose_obj_3d/checkpoint/submit/config_waypoints_task_41_2023-01-27-11-13/model.bin --gpu 0 --n_frames 7 --eval_batch_size 10 --eval_n_frames 7
