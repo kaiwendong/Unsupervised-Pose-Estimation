@@ -7,6 +7,8 @@ https://anonymous.4open.science/r/Unsupervised-Pose-Estimation-60B7/README.md
 To get codes corresponding 3D scene pose estimation scenario, follow this link:
 https://anonymous.4open.science/r/Unsupervised-Pose-Estimation-177D/README.md
 
+## Visualization of the unsupervised model prediction vs ground truth 3D pose:
+![](output.gif)
 
 ## To get H3.6m data
 clone this repository and create a "data/" directory at the root of the project:
