@@ -1,5 +1,13 @@
-# MTF-Transformer
-## 环境
+# Unsupervised Learning of 3D-2D consistency for 3D pose Estimation from Multi-View Videos 
+
+This repo is the code corresponding to the unsupervised 3D human pose estimation scenario.
+To get the supervised 3D Human pose estimation code, follow this link :
+https://anonymous.4open.science/r/Unsupervised-Pose-Estimation-60B7/README.md
+
+To get codes corresponding 3D scene pose estimation scenario, follow this link:
+https://anonymous.4open.science/r/Unsupervised-Pose-Estimation-177D/README.md
+
+## To get H3.6m data :
 [multi-view.tar.gz 提取码：ise7](https://pan.baidu.com/s/134vlOJmFKJSH7tiATfA6BQ?pwd=ise7)
 ```bash
 cp multi-view.tar.gz ${path}/anaconda3/envs
@@ -13,27 +21,12 @@ conda activate multi-view
 ## 预训练模型
 [H36M_checkpoint 提取码：yshz ](https://pan.baidu.com/s/1lvwDJ0K_lHlEzfC06g-InA?pwd=yshz)
 ## 训练
-### H36M(有相机参数)
-```bash
-Ours(T=7): python run_h36m.py --cfg ./cfg/submit/t_7_dim_4.yaml --gpu 2 3
-```
-### H36M(无相机参数)
-```bash
-Ours(T=7):python run_h36m.py --cfg ./cfg/submit/t_7_dim_4.yaml --gpu 2 3
 
-Ours(T=27):python run_h36m.py --cfg ./cfg/submit/t_27_dim_4.yaml --gpu 2 3
-```
-
-## 测试
-### H36M(有相机参数)
+### To launch unsupervised training on H36M:
 ```bash
-Ours(T=7): python run_h36m.py --cfg ./cfg/submit/gt_trans_t_7_no_res.yaml --eval --checkpoint ./checkpoint/submit/gt_trans_t_7_no_res_2022-02-27-02-21/model.bin --gpu 2 3 --eval_n_frames 1 7 --eval_n_views 1 2 3 4 --eval_batch_size 500 --n_frames 7
-
-Triangulate: python run_h36m.py --triangulate --eval --eval_n_views 2 3 4
+python run_h36m_relative_pose.py --cfg ./cfg/submit/u_P_R.yaml
 ```
-### H36M(无相机参数)
-```bash
-Ours(T=7): python run_h36m.py --cfg ./cfg/submit/t_7_dim_4.yaml --eval --checkpoint ./checkpoint/submit/t_7_dim_4_2022-03-24-17-56/model.bin --gpu 2 3 --eval_n_frames 1 7 --eval_n_views 1 2 3 4 --eval_batch_size 500 --n_frames 7
+the file common/config.py contains the default training configuration.
+the parameters defined in ./cfg/submit/u_P_R.yaml overwrites the  common/config.py parameters.
 
-Ours(T=27)python run_h36m.py --cfg ./cfg/submit/t_27_dim_4.yaml --eval --checkpoint ./checkpoint/submit/t_27_dim_4_2022-03-20-21-16/model.bin --gpu 2 3 --eval_n_frames 1 7 --eval_n_views 1 2 3 4 --eval_batch_size 500 --n_frames 27
-```
+
