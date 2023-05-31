@@ -7,20 +7,24 @@ https://anonymous.4open.science/r/Unsupervised-Pose-Estimation-60B7/README.md
 To get codes corresponding 3D scene pose estimation scenario, follow this link:
 https://anonymous.4open.science/r/Unsupervised-Pose-Estimation-177D/README.md
 
-## To get H3.6m data :
-[multi-view.tar.gz 提取码：ise7](https://pan.baidu.com/s/134vlOJmFKJSH7tiATfA6BQ?pwd=ise7)
+
+## To get H3.6m data
+clone this repository and create a "data/" directory at the root of the project:
 ```bash
-cp multi-view.tar.gz ${path}/anaconda3/envs
-cd ${path}/anaconda3/envs
-mkdir -p multi-view
-tar -xzf multi-view.tar.gz -C multi-view
-conda activate multi-view
+mkdir data/
 ```
-## 数据
+we used the link provided by https://github.com/lelexx/MTF-Transformer : 
 [H36M_data 提取码：i6dd ](https://pan.baidu.com/s/1Wu6XEEuAtQLpttIAYQaE4Q?pwd=i6dd)
-## 预训练模型
-[H36M_checkpoint 提取码：yshz ](https://pan.baidu.com/s/1lvwDJ0K_lHlEzfC06g-InA?pwd=yshz)
-## 训练
+just go to that link and download all the files to the "data/" directory
+
+## Install Required packages
+### To launch unsupervised training on H36M:
+```bash
+pip install -r requirements.txt
+```
+
+
+## Models training
 
 ### To launch unsupervised training on H36M:
 ```bash
