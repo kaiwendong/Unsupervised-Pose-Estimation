@@ -85,6 +85,7 @@ python run_h36m_waypoints.py --cfg ./cfg/submit/config_waypoints_task_0.yaml
 training unsupervised model on task 0 :
 ```bash
 python run_h36m_waypoints_unsup.py --cfg ./cfg/submit/config_u_waypoints_task_0.yaml
+```
 
 training supervised model on task 8 : 
 ```bash
@@ -98,7 +99,6 @@ python run_h36m_waypoints_unsup.py --cfg ./cfg/submit/config_u_waypoints_task_8.
 ### Monitor training
 ```bash
 cd pose_obj_3d/log/submit/
-
 ```
 
 ```bash
