@@ -8,7 +8,7 @@ conda activate enrironment
 [2D joints detection results for H36M_data, Extration Code:i6dd ](https://pan.baidu.com/s/1Wu6XEEuAtQLpttIAYQaE4Q?pwd=i6dd)
 ## Pretrained Model
 [Checkpoint](Will be released soom.)
-## Training
+## Training & Evaluating
 ### Training on H36M with 27 frames and 4 views, batchsize=720
 ```bash
 python -m pdb run_h36m.py --cfg ./cfg/submit/mht_gt_trans_t_27_no_res.yaml --gpu 1,2,3,4,5,6 
