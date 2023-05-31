@@ -2,5 +2,7 @@
 *.npy
 __pycache__/
 .ipynb_checkpoints/
-images/*
+images
+data
+checkpoint
 !.gitignore
