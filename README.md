@@ -1,8 +1,7 @@
 # Supervised Phase of Paper ID 12502
 ## Environment
 ```bash
-conda env create --file environment.yaml
-conda activate enrironment
+pip install -r requirement.txt
 ```
 ## Dataset Preparation
 [2D joints detection results for H36M_data, Extration Code:i6dd ](https://pan.baidu.com/s/1Wu6XEEuAtQLpttIAYQaE4Q?pwd=i6dd)
