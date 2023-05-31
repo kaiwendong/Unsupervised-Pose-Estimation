@@ -1,0 +1,31 @@
+#!/bin/bash
+#
+#
+# Partition visee
+#SBATCH --partition=GPU-short
+#
+# Nombre de noeuds
+#SBATCH --nodes=1
+# Nombre de processus MPI par noeud
+#SBATCH --ntasks-per-node=1
+# Usage reserve des noeuds
+#SBATCH --exclusive
+#
+# Temps de presence du job
+#SBATCH --time=1-00:00:00
+#
+# Adresse mel de l’utilisateur
+  #SBATCH --mail-user=kevin.riou@etu.univ-nantes.fr
+# Envoi des mails
+#SBATCH --mail-type=fail,abort,end
+#
+# Nom du fichier de log de Slurm pour le job
+#SBATCH -o out_P_R_eval.out
+#SBATCH -e err_P_R_eval.err
+
+
+module load python/3.9.4
+
+source ./bin/activate
+python run_h36m_relative_pose.py --cfg ./cfg/submit/u_P_R.yaml --gpu 0  --eval --checkpoint ./checkpoint/submit/u_P_R_2023-02-09-00-52/model.bin --gpu 0 --n_frames 7 --eval_batch_size 360 --eval_n_frames 7
+

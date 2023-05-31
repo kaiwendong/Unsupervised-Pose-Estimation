@@ -1,0 +1,15 @@
+submit/
+share/
+include/
+lib/
+*.out
+*.err
+data/
+images/
+log/
+checkpoint/
+lib64/
+bin/
+lib64
+*token*
+lib64/

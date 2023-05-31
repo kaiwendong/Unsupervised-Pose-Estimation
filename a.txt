@@ -1,0 +1,3 @@
+             JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
+           9870977 GPU-short script_P   riou_k  R       3:49      1 budbud006
+           9870976 GPU-short script_G   riou_k  R       3:59      1 budbud005

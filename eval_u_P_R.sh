@@ -1,0 +1,1 @@
+python -m pdb run_h36m.py --cfg ./cfg/submit/u_P_R.yaml --gpu 0  --eval --checkpoint ./checkpoint/submit/u_P_R_2023-09-00-52/model.bin --gpu 0 --n_frames 7 --eval_batch_size 10 --eval_n_frames 7 --vis_3d --vis_debug
