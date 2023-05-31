@@ -14,7 +14,9 @@ clone this repository and create a "data/" directory at the root of the project:
 mkdir data/
 ```
 we used the link provided by https://github.com/lelexx/MTF-Transformer : 
-[H36M_data 提取码：i6dd ](https://pan.baidu.com/s/1Wu6XEEuAtQLpttIAYQaE4Q?pwd=i6dd)
+
+https://pan.baidu.com/s/1Wu6XEEuAtQLpttIAYQaE4Q?pwd=i6dd
+
 just go to that link and download all the files to the "data/" directory
 
 ## Install Required packages
