@@ -15,7 +15,7 @@ class BERTEmbedding(nn.Module):
         if istrain:  
             self.view_num = len(cfg.H36M_DATA.TRAIN_CAMERAS) + cfg.TRAIN.NUM_AUGMENT_VIEWS
         else:
-            self.view_num = len(cfg.H36M_DATA.TRAIN_CAMERAS)
+            self.view_num = len(cfg.H36M_DATA.TEST_CAMERAS)
         self.view_embed = nn.Parameter(torch.zeros(len(cfg.H36M_DATA.TRAIN_CAMERAS) + cfg.TRAIN.NUM_AUGMENT_VIEWS, 1, embed_size))
 
     def forward(self, sequence):

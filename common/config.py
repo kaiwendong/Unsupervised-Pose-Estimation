@@ -194,7 +194,7 @@ def reset_config(cfg, args):
     if args.eval_batch_size is not None:
         cfg.TEST.BATCH_SIZE = args.eval_batch_size
     
-    cfg.TEST.METRIC = args.metric
+    # cfg.TEST.METRIC = args.metric
     cfg.TEST.METRIC_ALIGN_R = args.align_r
     cfg.TEST.METRIC_ALIGN_T = args.align_t
     cfg.TEST.METRIC_ALIGN_S = args.align_s

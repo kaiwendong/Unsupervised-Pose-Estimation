@@ -20,7 +20,7 @@ class Head(nn.Module):
         if istrain:
             self.view_num = len(cfg.H36M_DATA.TRAIN_CAMERAS) + cfg.TRAIN.NUM_AUGMENT_VIEWS
         else:
-            self.view_num = len(cfg.H36M_DATA.TRAIN_CAMERAS)
+            self.view_num = len(cfg.H36M_DATA.TEST_CAMERAS)
         self.shrink = nn.Conv1d(channels, self.hidden, 1, bias=True)
 
         self.num_joints = num_joints
@@ -34,7 +34,7 @@ class Head(nn.Module):
         #x = x[:, T // 2:(T // 2 + 1)]
         x = x.permute(0, 2, 1).contiguous()
         x = self.shrink(x).view(-1, self.view_num, self.hidden//self.transf_dim, self.transf_dim, self.frame_len).permute(0, 2, 3, 4, 1).contiguous()
-        
+
         return x
 
 
@@ -140,6 +140,7 @@ class MHF(nn.Module):
         self.n_layers = cfg.NETWORK.T_FORMER.NUM_LAYERS
         self.attn_heads = cfg.NETWORK.T_FORMER.NUM_HEADS
         self.max_view_num = len(cfg.H36M_DATA.TRAIN_CAMERAS) + cfg.TRAIN.NUM_AUGMENT_VIEWS
+        self.istrain = istrain
         if istrain:
             self.view_num = len(cfg.H36M_DATA.TRAIN_CAMERAS) + cfg.TRAIN.NUM_AUGMENT_VIEWS
         else:
@@ -156,7 +157,7 @@ class MHF(nn.Module):
         self.view_embedding = nn.Parameter(torch.zeros(1, 1, 4, 1))\
             .repeat(self.cfg.TRAIN.BATCH_SIZE*(self.max_view_num), T, 1, self.hidden)
         # intermidiate shrink
-        self.inter_shrink = nn.Linear(self.hidden*len(cfg.H36M_DATA.TRAIN_CAMERAS), self.hidden*3)
+        self.inter_shrink = nn.Linear(self.hidden*max(len(cfg.H36M_DATA.TRAIN_CAMERAS),4), self.hidden*3)
         #
         self.Transformer_hypothesis = Transformer_hypothesis(depth=3, embed_dim=self.hidden, mlp_hidden_dim=self.hidden*2, length=T)
 
@@ -192,8 +193,10 @@ class MHF(nn.Module):
             x_2 = x_2 + x.view(-1, N, T, self.hidden)[:, 2:3].squeeze(1).repeat([N, 1, 1])
             x_3 = x_3 + x.view(-1, N, T, self.hidden)[:, 3:4].squeeze(1).repeat([N, 1, 1])
         x = torch.cat([x_0, x_1, x_2, x_3], dim=-1)
-        
-        x += self.view_embedding[:B].view(x.shape[0], self.T, -1).to(x.device)
+        if self.istrain==False & (self.cfg.NETWORK.TEMPORAL_LENGTH != self.cfg.TEST.NUM_FRAMES[0]):
+            x += self.view_embedding[:B,:self.cfg.TEST.NUM_FRAMES[0]].view(x.shape[0], self.cfg.TEST.NUM_FRAMES[0], -1).to(x.device)
+        else:
+            x += self.view_embedding[:B].view(x.shape[0], self.T, -1).to(x.device)
         # feature projection, aims to concatenate all 4 features and project them to 3 features corresponding to q, k, v
         
         x = self.inter_shrink(x)

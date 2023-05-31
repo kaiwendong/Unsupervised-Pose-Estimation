@@ -363,7 +363,7 @@ class Human36mCamera(MocapDataset):
                                                    cam['center'],
                                                    cam['radial_distortion'],
                                                    cam['tangential_distortion'])))
-        wd3d_path = '/opt/data/jupyterlab/kaiwen/repo/pose3d/MHFormer/dataset/data_3d_h36m.npz'
+        wd3d_path = './data/data_3d_h36m.npz'
         data_mhf = np.load(wd3d_path, allow_pickle=True)['positions_3d'].item()
         self._data = {}
         for subject, actions in data_mhf.items():

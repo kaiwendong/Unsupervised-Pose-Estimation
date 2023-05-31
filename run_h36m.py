@@ -306,8 +306,8 @@ if True:
         start_time = time.time()
         model.train()
         process = tqdm(total = train_generator.num_batches)
-
         for batch_2d, sub_action, batch_flip in train_generator.next_epoch():
+            # break
             if EVAL:
                 break
             process.update(1)

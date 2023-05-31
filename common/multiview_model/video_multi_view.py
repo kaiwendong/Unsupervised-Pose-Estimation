@@ -249,7 +249,9 @@ class RotationModel(nn.Module):
             bn_layers.append(nn.BatchNorm2d(channels, momentum=momentum))
         self.conv_layers = nn.ModuleList(conv_layers)
         self.bn_layers = nn.ModuleList(bn_layers)
+        # if self.cfg.TRAIN
         self.shrink = nn.Conv2d(channels, self.cfg.NETWORK.TRANSFORM_DIM**2, 1, 1, bias = True)
+        # self.shrink = nn.Conv2d(channels, self.cfg.NETWORK.TRANSFORM_DIM**2, 1, 1, bias = True)
     def set_bn_momentum(self, momentum):
         self.expand_bn.momentum = momentum
         for bn in self.bn_layers:
@@ -546,11 +548,14 @@ class FuseView(nn.Module):
                 f_conv = torch.einsum('bnctm, bqctsm -> bnqtsm', f, ag)
                 tran_gt = None
             else:
-                ag_rot = ag_rot.view(ag_rot.shape[0], ag_rot.shape[1], ag_rot.shape[2], ag_rot.shape[3], N, N) #(B, 3, 3, T, N, N)
+                print('To adapt the situation of training on less views and testing on more views, modified foloowing 2 part: Line552-557')
+                # ag_rot = ag_rot.view(ag_rot.shape[0], ag_rot.shape[1], ag_rot.shape[2], ag_rot.shape[3], N, N) #(B, 3, 3, T, N, N)
+                ag_rot = ag_rot.view(-1, ag_rot.shape[1], ag_rot.shape[2], ag_rot.shape[3], N, max(N, 4)) #(B, 3, 3, T, N, N)
 
                 tran = None
                 tran_gt = ag_rot
-                f_conv = torch.einsum('bnctm, bqcsm -> bnqtsm', f, ag_rot[:,:,:,0])
+                # f_conv = torch.einsum('bnctm, bqcsm -> bnqtsm', f, ag_rot[:,:,:,0])
+                f_conv = torch.einsum('bnctm, bqcsm -> bnqtsm', f, ag_rot[:,:,:,0,...,:N])
         else:
             f_conv = x2
             
