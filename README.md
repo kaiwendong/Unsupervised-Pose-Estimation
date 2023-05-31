@@ -4,7 +4,12 @@
 pip install -r requirement.txt
 ```
 ## Dataset Preparation
-[2D joints detection results for H36M_data, Extration Code:i6dd ](https://pan.baidu.com/s/1Wu6XEEuAtQLpttIAYQaE4Q?pwd=i6dd)
+clone this repository and create a "data/" directory at the root of the project:
+```bash
+mkdir data/
+```
+
+we used the link provided by https://github.com/lelexx/MTF-Transformer : H36M_data Extration Code：i6dd just go to that link and download all the files to the "data/" directory
 ## Pretrained Model
 [Checkpoint](Will be released soom.)
 ## Training & Evaluating
